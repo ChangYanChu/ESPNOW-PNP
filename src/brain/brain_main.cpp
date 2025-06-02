@@ -45,22 +45,22 @@ void setup() {
     gcodeProcessor.begin(&feederManager, &espnowManager);
     
     // 等待系统稳定
-    delay(2000);
+    delay(200);
     
-    Serial.println(F("=== Brain Controller Ready ==="));
-    Serial.println(F("Manual commands: discovery, request_registration, clear_registration, status, help"));
-    Serial.println(F("Supported G-code commands:"));
-    Serial.println(F("M610 S1/S0 - Enable/Disable feeders"));
-    Serial.println(F("M600 Nx Fy - Complete feed cycle for feeder x (advance + retract)"));
-    Serial.println(F("M602 Nx - Query feeder x status"));
-    Serial.println(F("M280 Nx Ay - Set feeder x servo to angle y"));
-    Serial.println(F("M603 Nx Ay By Cy Fy - Update feeder x config"));
-    Serial.println(F("M620 - Show all hands status"));
-    Serial.println(F("Feedback system commands:"));
-    Serial.println(F("M604 Nx - Check feedback status for feeder x"));
-    Serial.println(F("M605 Nx S1/S0 - Enable/Disable feedback for feeder x"));
-    Serial.println(F("M606 Nx - Clear manual feed flag for feeder x"));
-    Serial.println(F("M607 Nx - Process manual feed for feeder x"));
+    // Serial.println(F("=== Brain Controller Ready ==="));
+    // Serial.println(F("Manual commands: discovery, request_registration, clear_registration, status, help"));
+    // Serial.println(F("Supported G-code commands:"));
+    // Serial.println(F("M610 S1/S0 - Enable/Disable feeders"));
+    // Serial.println(F("M600 Nx Fy - Complete feed cycle for feeder x (advance + retract)"));
+    // Serial.println(F("M602 Nx - Query feeder x status"));
+    // Serial.println(F("M280 Nx Ay - Set feeder x servo to angle y"));
+    // Serial.println(F("M603 Nx Ay By Cy Fy - Update feeder x config"));
+    // Serial.println(F("M620 - Show all hands status"));
+    // Serial.println(F("Feedback system commands:"));
+    // Serial.println(F("M604 Nx - Check feedback status for feeder x"));
+    // Serial.println(F("M605 Nx S1/S0 - Enable/Disable feedback for feeder x"));
+    // Serial.println(F("M606 Nx - Clear manual feed flag for feeder x"));
+    // Serial.println(F("M607 Nx - Process manual feed for feeder x"));
 }
 
 void loop() {

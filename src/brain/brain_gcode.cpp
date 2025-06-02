@@ -10,7 +10,7 @@ void BrainGCode::begin(FeederManager* feederMgr, BrainESPNow* espnowMgr) {
     feederManager = feederMgr;
     espnowManager = espnowMgr;
     inputBuffer.reserve(MAX_GCODE_LINE_LENGTH);
-    Serial.println(F("Brain G-code processor initialized"));
+    // Serial.println(F("Brain G-code processor initialized"));
 }
 
 void BrainGCode::update() {

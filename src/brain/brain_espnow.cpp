@@ -33,9 +33,9 @@ bool BrainESPNow::begin() {
         return false;
     }
     
-    Serial.print(F("Brain MAC: "));
-    Serial.println(WiFi.macAddress());
-    Serial.println(F("ESP-NOW Brain initialized"));
+    // Serial.print(F("Brain MAC: "));
+    // Serial.println(WiFi.macAddress());
+    // Serial.println(F("ESP-NOW Brain initialized"));
     
     // 发送发现广播
     broadcastDiscovery();
@@ -321,7 +321,7 @@ void BrainESPNow::clearRegistrations() {
         memset(hands[i].macAddress, 0, 6);
     }
     
-    Serial.println(F("All registrations cleared"));
+    // Serial.println(F("All registrations cleared"));
 }
 
 void BrainESPNow::handleRegistration(const uint8_t *mac_addr, const ESPNowPacket& packet) {
@@ -370,21 +370,21 @@ void BrainESPNow::handleRegistration(const uint8_t *mac_addr, const ESPNowPacket
     // 先尝试添加peer，成功后才设置registered标志
     if (addPeer(handId)) {
         hands[handId].registered = true;  // 设置注册标志
-        Serial.print(F("Hand "));
-        Serial.print(handId);
-        Serial.print(F(" registered with feeder ID "));
-        Serial.print(feederId);
-        Serial.print(F(", MAC: "));
-        for (int i = 0; i < 6; i++) {
-            Serial.print(mac_addr[i], HEX);
-            if (i < 5) Serial.print(":");
-        }
-        Serial.println();
+        // Serial.print(F("Hand "));
+        // Serial.print(handId);
+        // Serial.print(F(" registered with feeder ID "));
+        // Serial.print(feederId);
+        // Serial.print(F(", MAC: "));
+        // for (int i = 0; i < 6; i++) {
+        //     Serial.print(mac_addr[i], HEX);
+        //     if (i < 5) Serial.print(":");
+        // }
+        // Serial.println();
     } else {
-        Serial.print(F("Failed to add peer for hand "));
-        Serial.print(handId);
-        Serial.print(F(" with feeder ID "));
-        Serial.println(feederId);
+        // Serial.print(F("Failed to add peer for hand "));
+        // Serial.print(handId);
+        // Serial.print(F(" with feeder ID "));
+        // Serial.println(feederId);
         // 清理失败的注册
         memset(&hands[handId], 0, sizeof(hands[handId]));
     }
