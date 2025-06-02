@@ -24,12 +24,21 @@ struct VirtualFeeder {
     uint16_t minPulse;
     uint16_t maxPulse;
     
+    // 反馈系统状态
+    bool feedbackEnabled;
+    bool tapeLoaded;
+    bool manualFeedDetected;
+    uint16_t errorCount;
+    unsigned long lastFeedbackUpdate;
+    
     VirtualFeeder() : feederId(0), handId(0), enabled(false), online(false), 
                      lastResponse(0), fullAdvanceAngle(DEFAULT_FULL_ADVANCE_ANGLE),
                      halfAdvanceAngle(DEFAULT_HALF_ADVANCE_ANGLE), 
                      retractAngle(DEFAULT_RETRACT_ANGLE),
                      feedLength(DEFAULT_FEED_LENGTH), settleTime(DEFAULT_SETTLE_TIME),
-                     minPulse(DEFAULT_MIN_PULSE), maxPulse(DEFAULT_MAX_PULSE) {}
+                     minPulse(DEFAULT_MIN_PULSE), maxPulse(DEFAULT_MAX_PULSE),
+                     feedbackEnabled(false), tapeLoaded(false), manualFeedDetected(false),
+                     errorCount(0), lastFeedbackUpdate(0) {}
 };
 
 class FeederManager {
@@ -46,9 +55,19 @@ public:
     bool setServoAngle(uint8_t feederId, uint16_t angle);
     bool requestFeederStatus(uint8_t feederId);
     
+    // 反馈系统操作
+    bool checkFeedback(uint8_t feederId);
+    bool enableFeedback(uint8_t feederId, bool enable);
+    bool clearManualFeedFlag(uint8_t feederId);
+    bool processManualFeed(uint8_t feederId);  // 注意：已改为本地处理方案，此方法仅清除标志
+    
     // 状态查询
     bool isFeederOnline(uint8_t feederId);
     bool isSystemEnabled() const { return systemEnabled; }
+    bool isTapeLoaded(uint8_t feederId);
+    bool isFeedbackEnabled(uint8_t feederId);
+    bool hasManualFeedDetected(uint8_t feederId);
+    uint16_t getFeederErrorCount(uint8_t feederId);
     String getFeederStatus(uint8_t feederId);
     String getAllHandsStatus();
     
@@ -59,6 +78,7 @@ public:
     
     // 响应处理
     void handleResponse(uint8_t handId, const ESPNowResponse& response);
+    void handleFeedbackStatus(uint8_t handId, const ESPNowFeedbackPacket& feedbackPacket);
 
 private:
     BrainESPNow* espnowManager;
@@ -67,7 +87,8 @@ private:
     unsigned long lastHeartbeat;
     
     // 辅助函数
-    uint8_t feederIdToHandId(uint8_t feederId);
+    void updateFeederMappings();
+    uint8_t findFeederByHandId(uint8_t handId);
     bool sendCommand(uint8_t feederId, ESPNowCommandType cmd, uint16_t angle = 0, 
                     uint8_t feedLength = 0, uint16_t pulseMin = 0, uint16_t pulseMax = 0);
     void checkHandsOnlineStatus();

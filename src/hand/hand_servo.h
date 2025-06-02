@@ -5,12 +5,16 @@
 #include <Servo.h>  // 直接使用标准Servo库
 #include "hand_config.h"
 
+// 前向声明
+class HandStatusLED;
+
 class HandServo {
 public:
     HandServo();
     
     void begin();
     void update();
+    void setStatusLED(HandStatusLED* led) { statusLED = led; }
     
     // 舵机控制
     bool attach(uint16_t minPulse = SERVO_MIN_PULSE, uint16_t maxPulse = SERVO_MAX_PULSE);
@@ -34,6 +38,7 @@ private:
     bool moving;
     unsigned long moveStartTime;
     uint16_t settleTime;
+    HandStatusLED* statusLED;  // LED状态管理
     
     // 异步操作队列
     struct PendingOperation {

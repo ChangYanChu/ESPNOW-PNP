@@ -9,6 +9,12 @@ BrainGCode gcodeProcessor;
 BrainESPNow espnowManager;
 FeederManager feederManager;
 
+// 串口命令处理 - 只处理非G-code的管理命令
+void checkSerialCommands() {
+    // 不在这里读取串口，让G-code处理器优先处理
+    // 这个函数现在用于处理特殊的管理命令
+}
+
 void setup() {
     // 初始化串口
     Serial.begin(115200);
@@ -32,25 +38,34 @@ void setup() {
     // 初始化喂料器管理器
     feederManager.begin(&espnowManager);
     
+    // 设置ESP-NOW管理器的FeederManager引用
+    espnowManager.setFeederManager(&feederManager);
+    
     // 初始化G-code处理器
-    gcodeProcessor.begin(&feederManager);
+    gcodeProcessor.begin(&feederManager, &espnowManager);
     
     // 等待系统稳定
     delay(2000);
     
     Serial.println(F("=== Brain Controller Ready ==="));
+    Serial.println(F("Manual commands: discovery, request_registration, clear_registration, status, help"));
     Serial.println(F("Supported G-code commands:"));
     Serial.println(F("M610 S1/S0 - Enable/Disable feeders"));
     Serial.println(F("M600 Nx Fy - Advance feeder x by y mm"));
-    Serial.println(F("M601 Nx - Retract feeder x after pick"));
-    Serial.println(F("M602 Nx - Check feeder x status"));
+    Serial.println(F("M601 Nx - Retract feeder x"));
+    Serial.println(F("M602 Nx - Query feeder x status"));
     Serial.println(F("M280 Nx Ay - Set feeder x servo to angle y"));
-    Serial.println(F("M603 Nx... - Update feeder x configuration"));
-    Serial.println(F("M620 - List all hands status"));
+    Serial.println(F("M603 Nx Ay By Cy Fy - Update feeder x config"));
+    Serial.println(F("M620 - Show all hands status"));
+    Serial.println(F("Feedback system commands:"));
+    Serial.println(F("M604 Nx - Check feedback status for feeder x"));
+    Serial.println(F("M605 Nx S1/S0 - Enable/Disable feedback for feeder x"));
+    Serial.println(F("M606 Nx - Clear manual feed flag for feeder x"));
+    Serial.println(F("M607 Nx - Process manual feed for feeder x"));
 }
 
 void loop() {
-    // 处理G-code命令
+    // 处理所有串口输入（G-code和管理命令）
     gcodeProcessor.update();
     
     // 更新ESP-NOW通信
