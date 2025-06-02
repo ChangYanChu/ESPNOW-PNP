@@ -116,10 +116,6 @@ void BrainGCode::processCommand() {
             DEBUG_GCODE_PRINT("Calling processM600");
             processM600();
             break;
-        case MCODE_RETRACT:
-            DEBUG_GCODE_PRINT("Calling processM601");
-            processM601();
-            break;
         case MCODE_STATUS:
             DEBUG_GCODE_PRINT("Calling processM602");
             processM602();
@@ -225,29 +221,13 @@ void BrainGCode::processM600() {
         return;
     }
     
-    DEBUG_GCODE_PRINTF("Calling feederManager->advanceFeeder(%d, %d)\n", feederId, feedLength);
+    DEBUG_GCODE_PRINTF("Calling feederManager->completeFeedCycle(%d, %d)\n", feederId, feedLength);
     
-    bool success = feederManager->advanceFeeder(feederId, feedLength);
+    bool success = feederManager->completeFeedCycle(feederId, feedLength);
     
-    DEBUG_GCODE_PRINTF("advanceFeeder result: %s\n", success ? "SUCCESS" : "FAILED");
+    DEBUG_GCODE_PRINTF("completeFeedCycle result: %s\n", success ? "SUCCESS" : "FAILED");
     
-    sendResponse(success, success ? F("Feed command sent") : F("Failed to send feed command"));
-}
-
-void BrainGCode::processM601() {
-    if (!systemEnabled) {
-        sendResponse(false, F("Enable system first! M610 S1"));
-        return;
-    }
-    
-    int feederId = parseParameter('N', -1);
-    if (!validateFeederNumber(feederId)) {
-        sendResponse(false, F("Invalid feeder number"));
-        return;
-    }
-    
-    bool success = feederManager->retractFeeder(feederId);
-    sendResponse(success, success ? F("Retract command sent") : F("Failed to send retract command"));
+    sendResponse(success, success ? F("Complete feed cycle sent") : F("Failed to send feed cycle command"));
 }
 
 void BrainGCode::processM602() {

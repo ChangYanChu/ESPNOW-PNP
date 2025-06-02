@@ -30,8 +30,7 @@ private:
     
     // M代码处理函数
     void processM610(); // 系统启用/禁用
-    void processM600(); // 推进喂料
-    void processM601(); // 取料后回缩
+    void processM600(); // 推进喂料（含自动回缩）
     void processM602(); // 查询状态
     void processM280(); // 设置舵机角度
     void processM603(); // 更新配置

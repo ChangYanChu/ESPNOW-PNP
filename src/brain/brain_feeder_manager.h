@@ -52,6 +52,7 @@ public:
     bool enableSystem(bool enable);
     bool advanceFeeder(uint8_t feederId, uint8_t length);
     bool retractFeeder(uint8_t feederId);
+    bool completeFeedCycle(uint8_t feederId, uint8_t length); // OpenPnP兼容：完整进料循环
     bool setServoAngle(uint8_t feederId, uint16_t angle);
     bool requestFeederStatus(uint8_t feederId);
     

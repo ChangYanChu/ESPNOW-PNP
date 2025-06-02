@@ -51,8 +51,7 @@ void setup() {
     Serial.println(F("Manual commands: discovery, request_registration, clear_registration, status, help"));
     Serial.println(F("Supported G-code commands:"));
     Serial.println(F("M610 S1/S0 - Enable/Disable feeders"));
-    Serial.println(F("M600 Nx Fy - Advance feeder x by y mm"));
-    Serial.println(F("M601 Nx - Retract feeder x"));
+    Serial.println(F("M600 Nx Fy - Complete feed cycle for feeder x (advance + retract)"));
     Serial.println(F("M602 Nx - Query feeder x status"));
     Serial.println(F("M280 Nx Ay - Set feeder x servo to angle y"));
     Serial.println(F("M603 Nx Ay By Cy Fy - Update feeder x config"));

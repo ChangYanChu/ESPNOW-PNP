@@ -62,6 +62,13 @@ void HandESPNow::update() {
     // 处理待发送的注册请求
     processScheduledRegistration();
     
+    // 自动回缩逻辑
+    if (feederRetractPending && millis() >= feederRetractTime) {
+        feederRetractPending = false;
+        DEBUG_HAND_ESPNOW_PRINT("Feeder auto retracting to 0 degrees");
+        servoController->requestSetAngle(feederRetractAngle);
+    }
+    
     // 定期发送心跳响应（只要有配置的feeder ID就发送）
     if (feederId != 255 && millis() - lastHeartbeatResponse > HEARTBEAT_RESPONSE_INTERVAL) {
         sendStatus(STATUS_OK, "Hand alive");
@@ -277,17 +284,17 @@ void HandESPNow::processServoAngle(const ESPNowPacket& packet) {
 }
 
 void HandESPNow::processFeederAdvance(const ESPNowPacket& packet) {
-    DEBUG_HAND_ESPNOW_PRINTF("Feed advance request - Length: %d\n", packet.feedLength);
-    
-    // 实现喂料推进逻辑，使用异步操作
+    DEBUG_HAND_ESPNOW_PRINTF("Feeder advance request - Length: %d\n", packet.feedLength);
     uint8_t feedLength = packet.feedLength;
-    
     if (feedLength > 0) {
-        DEBUG_HAND_ESPNOW_PRINT("Starting feed advance to 80°");
-        // 异步推进到80度
-        servoController->requestSetAngle(80);
-        sendResponse(packet, STATUS_OK, "Feed advance started");
-        DEBUG_HAND_ESPNOW_PRINT("Feed advance response sent");
+        DEBUG_HAND_ESPNOW_PRINT("Setting servo to 80 degrees for advance");
+        // 推进到指定角度
+        servoController->requestSetAngle(feederAdvanceAngle);
+        // 设置回缩任务
+        feederRetractPending = true;
+        feederRetractTime = millis() + feederRetractDelay;
+        sendResponse(packet, STATUS_OK, "Advance command queued");
+        DEBUG_HAND_ESPNOW_PRINT("Advance response sent, retract scheduled");
     } else {
         DEBUG_HAND_ESPNOW_PRINT("No feed needed (length = 0)");
         sendResponse(packet, STATUS_OK, "No feed needed");

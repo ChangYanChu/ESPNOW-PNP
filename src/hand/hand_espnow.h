@@ -67,6 +67,13 @@ private:
     void checkBrainConnection();
     void scheduleRegistration();        // 安排延迟注册
     void processScheduledRegistration(); // 处理延迟注册
+
+    // 推进后自动回缩相关变量
+    bool feederRetractPending = false;
+    unsigned long feederRetractTime = 0;
+    uint16_t feederAdvanceAngle = 80; // 推进角度
+    uint16_t feederRetractAngle = 0;  // 回缩角度
+    unsigned long feederRetractDelay = 400; // ms, 推进后等待多久回缩
 };
 
 #endif // HAND_ESPNOW_H

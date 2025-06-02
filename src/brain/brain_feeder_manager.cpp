@@ -99,6 +99,36 @@ bool FeederManager::retractFeeder(uint8_t feederId) {
                                         feeders[feederId].minPulse, feeders[feederId].maxPulse);
 }
 
+// OpenPnP兼容性：完整进料循环（推进+自动回缩）
+bool FeederManager::completeFeedCycle(uint8_t feederId, uint8_t length) {
+    DEBUG_FEEDER_MANAGER_PRINTF("completeFeedCycle called - feederId: %d, length: %d\n", feederId, length);
+    
+    if (feederId >= TOTAL_FEEDERS) {
+        DEBUG_FEEDER_MANAGER_PRINT("feederId >= TOTAL_FEEDERS");
+        return false;
+    }
+    if (!systemEnabled) {
+        DEBUG_FEEDER_MANAGER_PRINT("System not enabled");
+        return false;
+    }
+    if (!feeders[feederId].online) {
+        DEBUG_FEEDER_MANAGER_PRINTF("Feeder %d not online. HandId: %d, Online: %d\n", 
+                                   feederId, feeders[feederId].handId, feeders[feederId].online);
+        return false;
+    }
+    
+    uint8_t handId = feeders[feederId].handId;
+    if (handId >= MAX_HANDS) {
+        DEBUG_FEEDER_MANAGER_PRINTF("Invalid handId: %d >= %d\n", handId, MAX_HANDS);
+        return false;
+    }
+    
+    DEBUG_FEEDER_MANAGER_PRINTF("Sending complete feed cycle to hand %d with length %d\n", handId, length);
+    
+    // 发送完整进料循环命令（手部将执行推进+自动回缩）
+    return espnowManager->sendFeederAdvance(handId, length);
+}
+
 bool FeederManager::setServoAngle(uint8_t feederId, uint16_t angle) {
     if (feederId >= TOTAL_FEEDERS) return false;
     if (!systemEnabled) return false;
