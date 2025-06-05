@@ -3,25 +3,26 @@
 #include "brain_espnow.h"
 #include "brain_tcp_server.h"
 #include "gcode.h"
+
 void setup()
 {
-    // 初始化串口
-    Serial.begin(115200);
+    // Initialize serial communication
+    Serial.begin(SERIAL_BAUD);
     while (!Serial && millis() < 5000)
         ;
 
-    // 初始化ESP-NOW通信
+    // Initialize ESP-NOW communication
     espnow_setup();
 
-    // 初始化TCP Server
-    tcp_setup();
+    // Initialize TCP server
+    tcp_server_setup();
 
-    // 等待系统稳定
+    // Wait for the system to stabilize
     delay(200);
 }
 
 void loop()
 {
     listenToSerialStream();
-    tcp_loop();
+    tcp_server_loop(); // Handle TCP server operations
 }

@@ -22,5 +22,5 @@
 void listenToSerialStream();
 void sendAnswer(uint8_t error, String message);
 void sendAnswer(int error, const __FlashStringHelper* message);
-
+void processCommand();
 #endif // GCODE_H

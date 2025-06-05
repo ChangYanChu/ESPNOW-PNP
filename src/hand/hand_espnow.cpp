@@ -85,7 +85,7 @@ void espnow_setup()
     // Serial.printf("IP address: %s\n", WiFi.localIP().toString().c_str());
     Serial.printf("MAC address: %s\n", WiFi.macAddress().c_str());
     quickEspNow.onDataRcvd(dataReceived);
-    quickEspNow.begin(); // 在STA模式和同步发送模式下，不使用任何参数在与WiFi相同的频道启动ESP-NOW
+    quickEspNow.begin(6); // 在STA模式和同步发送模式下，不使用任何参数在与WiFi相同的频道启动ESP-NOW
 }
 
 void esp_update()

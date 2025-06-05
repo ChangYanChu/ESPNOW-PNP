@@ -330,9 +330,9 @@ void listenToSerialStream()
         char receivedChar = (char)Serial.read();
 
         // print back for debugging
-        // #ifdef DEBUG
+        #ifdef DEBUG
         Serial.print(receivedChar);
-        // #endif
+        #endif
 
         // add to buffer
         inputBuffer += receivedChar;
