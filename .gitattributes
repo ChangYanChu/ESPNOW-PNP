@@ -1,2 +1,10 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+# .pio
+.pio/* text eol=lf
+# Ignore all files in the .pio directory
+.pio/* linguist-generated=true
+# Ignore all files in the .pio directory
+.pio/build/* linguist-generated=true
+# Ignore all files in the .pio/build directory
+.pio/build/* text eol=lf
