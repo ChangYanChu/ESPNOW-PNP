@@ -1,5 +1,6 @@
 #include "gcode.h"
 #include "brain_espnow.h"
+#include "lcd.h"
 
 String inputBuffer = ""; // Buffer for incoming G-Code lines
 
@@ -34,25 +35,38 @@ bool validFeederNo(int8_t signedFeederNo, uint8_t feederNoMandatory = 0)
 
 void sendAnswer(uint8_t error, String message)
 {
-    if (error == 0)
+    String response;
+    if (error == 0) {
         Serial.print(F("ok "));
-    else
+        response = "ok " + message;
+    } else {
         Serial.print(F("error "));
+        response = "error " + message;
+    }
 
     Serial.println(message);
+    
+    // 更新LCD显示响应状态
+    lcd_update_gcode("", response.c_str());
 }
 
 void sendAnswer(int error, const __FlashStringHelper *message)
 {
+    String response;
     if (error == 0)
     {
         Serial.print("ok ");
+        response = "ok " + String(message);
     }
     else
     {
         Serial.print("error ");
+        response = "error " + String(message);
     }
     Serial.println(message);
+    
+    // 更新LCD显示响应状态
+    lcd_update_gcode("", response.c_str());
 }
 
 /**
@@ -86,6 +100,10 @@ float parseParameter(char code, float defaultVal)
  */
 void processCommand()
 {
+    // 在LCD上显示接收到的G-code命令
+    if (inputBuffer.length() > 0) {
+        lcd_update_gcode(inputBuffer.c_str(), "");
+    }
 
     // get the command, default -1 if no command found
     int cmd = parseParameter('M', -1);
@@ -139,7 +157,7 @@ void processCommand()
         // 1st to check: are feeder enabled?
         if (feederEnabled != ENABLED)
         {
-            sendAnswer(1, String(String("Enable feeder first! M") + String(MCODE_SET_FEEDER_ENABLE) + String(" S1")));
+            sendAnswer(1, String(String("Enable feeder first!") + String(MCODE_SET_FEEDER_ENABLE) + String(" S1")));
             break;
         }
 
@@ -184,19 +202,15 @@ void processCommand()
 #endif
 
         // start feeding
-        // 这里修改成使用ESPNow进行发送
+        // 通过ESP-NOW发送命令到Hand
         bool triggerFeedOK = sendFeederAdvanceCommand((uint8_t)signedFeederNo, feedLength);
         if (!triggerFeedOK)
         {
-            // report error to host at once, tape was not advanced...
-            sendAnswer(1, F("feeder not OK (not activated, no tape or tension of cover tape not OK)"));
+            // ESP-NOW发送失败，立即报告错误
+            sendAnswer(1, F("Failed to send feeder advance command"));
         }
-        else
-        {
-            // 向主机回复OK（如果没有错误）-> 不，这里暂时不回复：
-            // 等待送料过程完成后再发送OK，否则取料会过早开始。
-            // 实际的消息在 feeder.cpp 中发送
-        }
+        // 如果ESP-NOW发送成功，不立即回复
+        // 等待Hand处理完成后通过CMD_RESPONSE回复
 
         break;
     }

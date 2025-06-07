@@ -35,6 +35,7 @@ void loop()
     // 处理ESP-NOW
     // esp_update();
     processReceivedCommand();
+    processPendingResponse(); // 处理待发送的响应
 
     // 其他循环逻辑...
     delay(10);

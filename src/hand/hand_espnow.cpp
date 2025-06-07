@@ -21,6 +21,12 @@ volatile uint8_t receivedFeederID = 0;
 volatile uint8_t receivedFeedLength = 0;
 volatile uint32_t commandTimestamp = 0;
 
+// 全局变量用于响应状态管理
+volatile bool hasPendingResponse = false;
+volatile uint8_t pendingResponseFeederID = 0;
+volatile uint8_t pendingResponseStatus = 0;
+volatile char pendingResponseMessage[16] = {0};
+
 static const String msg = "Hello esp-now!";
 
 #define USE_BROADCAST 1 // Set this to 1 to use broadcast communication
@@ -73,19 +79,17 @@ void dataReceived(uint8_t *address, uint8_t *data, uint8_t len, signed int rssi,
 
 void espnow_setup()
 {
-
+    // 设置为Station模式但不连接WiFi，仅用于ESP-NOW通信
     WiFi.mode(WIFI_MODE_STA);
-    // WiFi.begin("HUAWEI-P61", "12345678");
-    // while (WiFi.status() != WL_CONNECTED)
-    // {
-    //     delay(500);
-    //     Serial.print(".");
-    // }
-    // Serial.printf("Connected to %s in channel %d\n", WiFi.SSID().c_str(), WiFi.channel());
-    // Serial.printf("IP address: %s\n", WiFi.localIP().toString().c_str());
+    WiFi.disconnect();
+    
     Serial.printf("MAC address: %s\n", WiFi.macAddress().c_str());
+    Serial.println("ESP-NOW initializing without WiFi connection...");
+    
     quickEspNow.onDataRcvd(dataReceived);
-    quickEspNow.begin(6); // 在STA模式和同步发送模式下，不使用任何参数在与WiFi相同的频道启动ESP-NOW
+    quickEspNow.begin(6); // 使用固定频道6启动ESP-NOW，与Brain端保持一致
+    
+    Serial.println("ESP-NOW initialized on channel 6");
 }
 
 void esp_update()
@@ -137,6 +141,10 @@ void processReceivedCommand()
         handleFeederAdvanceCommand(receivedFeederID, receivedFeedLength);
         break;
 
+    case CMD_HEARTBEAT:
+        handleHeartbeatCommand();
+        break;
+
     default:
         Serial.printf("Unknown command type: 0x%02X\n", receivedCommandType);
         // sendErrorResponse(receivedFeederID, STATUS_INVALID_PARAM, "Unknown command");
@@ -156,8 +164,55 @@ void handleFeederAdvanceCommand(uint8_t feederID, uint8_t feedLength)
     // 模拟处理时间
     delay(100);
 
-    // 发送成功响应
-    // sendSuccessResponse(feederID, "Feed OK");
+    // 不直接发送响应，而是设置待发送的响应状态
+    schedulePendingResponse(feederID, STATUS_OK, "Feed OK");
+}
+
+// 处理心跳命令
+void handleHeartbeatCommand()
+{
+    Serial.println("Received heartbeat, sending response");
+    
+    uint8_t myFeederID = getCurrentFeederID();
+    schedulePendingResponse(myFeederID, STATUS_OK, "Online");
+}
+
+// 调度待发送的响应
+void schedulePendingResponse(uint8_t feederID, uint8_t status, const char *message)
+{
+    pendingResponseFeederID = feederID;
+    pendingResponseStatus = status;
+    strncpy((char*)pendingResponseMessage, message, sizeof(pendingResponseMessage) - 1);
+    pendingResponseMessage[sizeof(pendingResponseMessage) - 1] = '\0';
+    hasPendingResponse = true;
+    
+    Serial.printf("Scheduled response: FeederID=%d, Status=0x%02X, Message=%s\n", 
+                  feederID, status, message);
+}
+
+// 处理待发送的响应（在主循环中调用）
+void processPendingResponse()
+{
+    if (!hasPendingResponse)
+    {
+        return; // 没有待发送的响应
+    }
+
+    // 清除待发送标志
+    hasPendingResponse = false;
+
+    Serial.printf("Processing pending response: FeederID=%d, Status=0x%02X, Message=%s\n",
+                  pendingResponseFeederID, pendingResponseStatus, (char*)pendingResponseMessage);
+
+    // 根据状态发送相应的响应
+    if (pendingResponseStatus == STATUS_OK)
+    {
+        sendSuccessResponse(pendingResponseFeederID, (char*)pendingResponseMessage);
+    }
+    else
+    {
+        sendErrorResponse(pendingResponseFeederID, pendingResponseStatus, (char*)pendingResponseMessage);
+    }
 }
 
 // 发送成功响应
@@ -171,6 +226,13 @@ void sendSuccessResponse(uint8_t feederID, const char *message)
     response.timestamp = millis();
     strncpy(response.message, message, sizeof(response.message) - 1);
     response.message[sizeof(response.message) - 1] = '\0';
+
+    Serial.printf("Hand sending ESPNowResponse:\n");
+    Serial.printf("  Size: %d bytes\n", sizeof(response));
+    Serial.printf("  Command Type: 0x%02X\n", response.commandType);
+    Serial.printf("  Hand ID: %d\n", response.handId);
+    Serial.printf("  Status: 0x%02X\n", response.status);
+    Serial.printf("  Message: %s\n", response.message);
 
     bool result = quickEspNow.send(DEST_ADDR, (uint8_t *)&response, sizeof(response));
     if (!result)

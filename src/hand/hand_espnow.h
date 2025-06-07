@@ -7,6 +7,9 @@ void espnow_setup();
 void esp_update();
 void processReceivedCommand();
 void handleFeederAdvanceCommand(uint8_t feederID, uint8_t feedLength);
+void handleHeartbeatCommand();
+void schedulePendingResponse(uint8_t feederID, uint8_t status, const char *message);
+void processPendingResponse();
 void sendSuccessResponse(uint8_t feederID, const char *message);
 void sendErrorResponse(uint8_t feederID, uint8_t errorCode, const char *message);
 #endif // BRAIN_ESPNOW_H
