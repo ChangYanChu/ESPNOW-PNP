@@ -1,181 +1,270 @@
-<!-- filepath: /Users/chanchu/Code/ESPNOW-PNP/README.md -->
-# ESPNOW-PNP 项目文档
+# 🔧 EspNow-Feeder 项目文档
 
-## 1. 作者注
+[![PlatformIO](https://img.shields.io/badge/PlatformIO-compatible-blue.svg)](https://platformio.org/)
+[![ESP32](https://img.shields.io/badge/ESP32-C3-green.svg)](https://www.espressif.com/)
+[![ESP8266](https://img.shields.io/badge/ESP8266-01S-orange.svg)](https://www.espressif.com/)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+> 🚀 基于ESP-NOW协议的无线Pick and Place系统喂料器解决方案
+
+## 0. 前前言
+项目还在更新中，可能涉及部分工程文件（3D模型 软件代码）变动。
+
+项目主要是个人折腾，不想所有的 Feeder 都要连接到主控板 Arduino Mega， 希望使用便宜的ESP01s来控制每个 Feeder，每个Feeder 通过 ESP01s 去和 中央控制单元 ("Brain")通信，中央控制单元 ("Brain")通过串口和上位机 OPenpnp进行通信，接收Gcode处理相对应的指令。
+
+## 1. 前言
 本人非软件工程专业，属于业余开发者。本项目的主要代码由 AI 辅助编写，我负责提供整体架构设计和思路。
+如果你想快速实现便宜的 Feeder 投入到  Lumenpnp 中使用，你可以使用 [MaxFeeder](https://github.com/RinthLabs/MaxFeeder) 项目直接快速的构建 Feeder。
+
+### 🛠️ 复制本项目所需技能
+
+#### 基础技能要求
+- 📟 **基本的编译烧录经验** `⭐⭐⭐`
+  - 熟悉 Arduino IDE 或 PlatformIO 开发环境
+  - 了解ESP32/ESP8266的基本烧录流程
+  - 具备基础的串口调试能力
+  - 预计学习时间：1-2天（如果完全没有经验）
+
+- 🖨️ **3D 打印经验** `⭐⭐`
+  - 能够操作3D打印机（FDM即可）
+  - 了解基本的3D打印参数设置（层高0.2mm，填充20%即可）
+  - 具备简单的后处理能力（去支撑、打磨等）
+  - 预计打印时间：每个喂料器约2-4小时
+
+- 🔧 **基础硬件连接** `⭐⭐`
+  - 能够识别和连接杜邦线、排针等基础元件
+  - 理解串口通信概念（TX、RX、GND、VCC）
+  - 掌握基本的电压概念（3.3V/5V区别）
+  - 能够使用万用表进行基础测量（可选但推荐）
+
+- 📖 **配置文件修改能力** `⭐`
+  - 能够使用文本编辑器修改`.h`配置文件
+  - 理解基本的`#define`宏定义概念
+  - 能够按说明修改参数值（如Feeder ID、引脚定义等）
+
+#### 可选技能（加分项）
+- 🔧 **电子制作进阶** `⭐⭐` - 焊接、制作杜邦线、PCB组装等
+- 📐 **CAD软件使用** `⭐⭐` - 如需修改3D模型（支持STEP格式）
+- 🤖 **PnP设备使用经验** `⭐⭐⭐` - OpenPnP等软件使用经验
+- 📡 **无线通信调试** `⭐⭐` - ESP-NOW协议理解、WiFi信道概念
+- 🧠 **嵌入式调试** `⭐⭐⭐` - 串口监视器使用、日志分析能力
+
+#### 💰 预算参考
+- **最小配置**（1个Brain + 1个Hand）：约 ¥50-80
+- **完整系统**（1个Brain + 多个Hand）：约 ¥30-50/每个额外Hand
+- **3D打印材料**：约 ¥5-10/每个喂料器
+- **舵机等配件**：约 ¥15-25/每个喂料器
+
+> 💡 **新手提示**：即使没有以上技能，跟随本文档的详细步骤也能成功完成项目！建议先从1个Brain+1个Hand的最小系统开始学习。
 
 ## 2. 项目概述
-ESPNOW-PNP 是一个基于 ESP-NOW 无线通信协议的 Pick and Place (PNP) 系统组件。该系统主要由一个中央控制单元 ("Brain") 和多个执行单元 ("Hand") 组成。"Brain" 负责接收上层指令 (如 G-code)，管理并调度 "Hand" 单元执行物料拾取和放置相关的喂料动作。"Hand" 单元直接控制伺服电机等执行机构完成具体的喂料操作。
+
+🎯 **ESPNOW-PNP** 是一个基于 ESP-NOW 无线通信协议的 Pick and Place (PNP) 系统组件。该系统主要由一个中央控制单元 ("Brain") 和多个执行单元 ("Hand") 组成：
+
+- 🧠 **Brain 单元**: 负责接收上层指令 (如 G-code)，管理并调度 "Hand" 单元执行物料拾取和放置相关的喂料动作
+- 🤖 **Hand 单元**: 直接控制伺服电机等执行机构完成具体的喂料操作
+
+### 🔍 项目特点
+- ✅ 无线通信，减少布线复杂度
+- ✅ 低成本ESP模块，性价比高
+- ✅ 模块化设计，易于扩展
+- ✅ 兼容OpenPnP等主流PnP软件
 
 本项目借鉴了 [MaxFeeder](https://github.com/RinthLabs/MaxFeeder) 项目的许多代码和设计思想。
 
-## 3. 系统架构
-*   **核心组件**:
-    *   **Brain (大脑)**: 通常运行在 ESP32C3 开发板 (例如 `esp32-c3-devkitm-1`)。作为主控制器，负责：
-        *   解析 G-code 指令。
-        *   通过 ESP-NOW 与多个 Hand 通信。
-        *   管理 Hand 单元的状态（在线、离线）。
-        *   通过 LCD 显示系统状态和操作信息。
-    *   **Hand (手)**: 通常运行在 ESP8266 系列芯片 (例如 ESP-01S)。作为从控制器，负责：
-        *   接收 Brain 发送的指令。
-        *   控制伺服电机 (Servo) 执行喂料动作。
-        *   向 Brain 发送状态响应。
-        *   每个 Hand 控制一个或多个喂料器 (Feeder)。
-*   **通信方式**:
-    *   Brain 和 Hand 之间主要通过 **ESP-NOW** 协议进行无线通信。ESP-NOW 是一种低功耗、快速响应的通信协议，适合此类多设备协作场景。
-    *   Brain 通过串口接收 G-code 指令。
-*   **硬件平台**:
-    *   Brain: `espressif32` 平台, `esp32-c3-devkitm-1` 板, Arduino 框架。
-    *   Hand: `espressif8266` 平台, `esp01_1m` 板, Arduino 框架。
+## 3. 🎨 3D模型和PCB
+本项目重新设计了PCB文件，用于安装 ESP01s 到Feeder上，具体可以查看 `3D/` 文件夹。
 
-## 4. ESP-NOW 通信协议 (`src/common/espnow_protocol.h`)
-ESP-NOW 通信协议定义了 Brain 和 Hand 之间交换数据的格式和类型。
+### 📁 可用文件
+- 🔧 **max-feeder-8mm-fix.stl** - 8mm规格喂料器3D模型
+- 🔧 **max-feeder-12mm-修改版.stl** - 12mm规格喂料器3D模型  
+- 📐 **STEP格式文件** - 可编辑的原始设计文件
 
-*   **数据包结构**:
-    *   `ESPNowPacket` (Brain -> Hand): 用于 Brain 向 Hand 发送指令。
-      ```cpp
-      // filepath: src/common/espnow_protocol.h
-      struct ESPNowPacket {
-          uint8_t commandType;             // 命令类型 (ESPNowCommandType)
-          uint8_t feederId;                // 喂料器ID (0xFF 为广播)
-          uint8_t feedLength;              // 喂料长度 (例如，单位mm)
-          uint8_t reserved[4];             // 保留字段
-      } __attribute__((packed));
-      ```
-    *   `ESPNowResponse` (Hand -> Brain): 用于 Hand 向 Brain 发送响应。
-      ```cpp
-      // filepath: src/common/espnow_protocol.h
-      struct ESPNowResponse {
-          uint8_t handId;                  // 手部ID (即 Feeder ID)
-          uint8_t commandType;             // 原始命令类型
-          uint8_t status;                  // 状态码 (ESPNowStatusCode)
-          uint8_t reserved[3];             // 保留字段
-          uint32_t sequence;               // 对应的序列号 (当前未使用)
-          uint32_t timestamp;              // 时间戳 (当前未使用)
-          char message[16];                // 状态消息 (例如 "Feed OK", "Online")
-      } __attribute__((packed));
-      ```
-*   **命令类型 (`ESPNowCommandType`)**:
-    *   `CMD_FEEDER_ADVANCE (0x04)`: 喂料推进指令。
-    *   `CMD_STATUS_REQUEST (0x06)`: 状态查询指令 (当前主要通过心跳实现)。
-    *   `CMD_RESPONSE (0x07)`: 响应命令 (Hand -> Brain)。
-    *   `CMD_HEARTBEAT (0x08)`: 心跳包 (Brain -> Hand, Hand 响应心跳)。
-    *   `CMD_HAND_REGISTER (0x09)`: Hand 注册命令 (Hand -> Brain, Hand 启动时发送)。
-*   **状态码 (`ESPNowStatusCode`)**:
-    *   `STATUS_OK (0x00)`: 操作成功。
-    *   `STATUS_ERROR (0x01)`: 通用错误。
-    *   `STATUS_BUSY (0x02)`: 设备忙。
-    *   `STATUS_TIMEOUT (0x03)`: 操作超时。
-    *   `STATUS_INVALID_PARAM (0x04)`: 无效参数。
+## 4. 🛒 需要耗材
 
-## 5. Brain 单元逻辑 (`src/brain/`)
-*   **初始化 (`brain_main.cpp` -> `setup()`)**:
-    *   初始化串口通信 (用于 G-code 和调试信息)。
-    *   初始化 LCD 显示屏。
-    *   初始化 ESP-NOW 通信 (`espnow_setup()` in `brain_espnow.cpp`)，设置回调函数 `dataReceived` 处理来自 Hand 的消息。
-*   **主循环 (`brain_main.cpp` -> `loop()`)**:
-    *   更新 LCD 显示内容 (`lcd_update()`)。
-    *   监听串口，接收并处理 G-code 指令 (`listenToSerialStream()` in `gcode.cpp`)。
-    *   处理接收到的 ESP-NOW 响应 (`processReceivedResponse()` in `brain_espnow.cpp`)。
-    *   检查是否有命令发送超时 (`checkCommandTimeout()` in `brain_espnow.cpp`)。
-    *   定期发送心跳包给所有 Hand，并检测 Hand 的在线状态 (`sendHeartbeat()` in `brain_espnow.cpp`)。
-    *   更新 LCD 上显示的在线 Hand 数量。
-*   **ESP-NOW 通信 (`brain_espnow.cpp`)**:
-    *   `espnow_setup()`: 初始化 ESP-NOW，注册数据接收回调。
-    *   `dataReceived()`: 回调函数，当收到 Hand 的 ESP-NOW 数据包时被调用。解析 `ESPNowResponse`，更新 Hand 状态，标记 `hasNewResponse`。
-    *   `processReceivedResponse()`: 处理 `hasNewResponse` 标记的响应。根据响应类型（如喂料完成、心跳响应）更新内部状态，并通过串口发送 G-code 响应 (`sendAnswer()`)。
-    *   `sendFeederAdvanceCommand()`: 向指定的 Hand 发送喂料指令 (`CMD_FEEDER_ADVANCE`)。设置 `waitingForResponse` 标志，记录命令发送时间用于超时检测。
-    *   `sendHeartbeat()`: 定期向所有 Hand 广播或逐个发送心跳包 (`CMD_HEARTBEAT`)。
-    *   `checkCommandTimeout()`: 检查 `waitingForResponse` 状态，如果命令超时未收到响应，则认为命令失败。
-    *   `getOnlineHandCount()`: 根据 `lastHandResponse` 数组（记录每个 Hand 最后响应时间）统计在线 Hand 数量。
-*   **G-code 处理 (`gcode.cpp`, `gcode.h`)**:
-    *   `listenToSerialStream()`: 从串口读取 G-code 指令行。
-    *   `processCommand()`: 解析 G-code 指令 (主要是 M-code)。
-        *   `M600 N<feederId> F<feedLength>`: 喂料指令。调用 `sendFeederAdvanceCommand()` 通过 ESP-NOW 发送给对应的 Hand。
-        *   `M610 S<0|1>`: 使能/禁用所有喂料器。
-        *   其他 M-code (部分在测试脚本中可见，如 `M601`, `M602`, `M280`)。
-    *   `sendAnswer()`: 通过串口向上位机发送 G-code 执行结果 (e.g., "ok", "error <message>")。
-*   **LCD 显示 (`lcd.cpp`, `lcd.h`)**:
-    *   使用 `LCDI2C_Multilingual_MCD` 库控制 I2C LCD1602 屏幕。
-    *   `lcd_setup()`: 初始化 LCD，定义自定义字符。
-    *   `lcd_update()`: 根据当前模式和系统状态刷新 LCD 显示内容。
-    *   显示模式包括：启动信息、系统运行状态、G-code 命令、错误信息等。
+### 4.1 ESP32C3 SuperMini
+ESP32C3 SuperMini 是淘宝上很便宜的C3 模组，用作Brain单元。
 
-## 6. Hand 单元逻辑 (`src/hand/`)
-*   **初始化 (`hand_main.cpp` -> `setup()`)**:
-    *   初始化串口通信。
-    *   初始化 Feeder ID 管理器 (`initFeederID()` in `feeder_id_manager.cpp`)。
-    *   初始化 ESP-NOW 通信 (`espnow_setup()` in `hand_espnow.cpp`)。
-    *   初始化舵机控制 (`setup_Servo()` in `hand_servo.cpp`)。
-*   **主循环 (`hand_main.cpp` -> `loop()`)**:
-    *   调用舵机 tick 函数 (`servoTick()` in `hand_servo.cpp`)。
-    *   处理串口命令 (`processSerialCommand()` in `feeder_id_manager.cpp`)。
-    *   处理接收到的 ESP-NOW 命令 (`processReceivedCommand()` in `hand_espnow.cpp`)。
-    *   处理待发送的 ESP-NOW 响应 (`processPendingResponse()` in `hand_espnow.cpp`)。
-*   **ESP-NOW 通信 (`hand_espnow.cpp`)**:
-    *   `dataReceived()`: 回调函数，处理来自 Brain 的 `ESPNowPacket`。
-    *   `processReceivedCommand()`: 根据命令类型执行操作，如 `CMD_FEEDER_ADVANCE`, `CMD_HEARTBEAT`。
-    *   `handleFeederAdvanceCommand()`: 执行喂料动作，准备响应。
-    *   `schedulePendingResponse()`: 设置待发送的响应内容。
-    *   `processPendingResponse()`: 发送 `ESPNowResponse` 给 Brain。
-*   **舵机控制 (`hand_servo.cpp`, `hand_servo.h`)**:
-    *   使用 `SoftServo` 库。
-    *   `setup_Servo()`: 初始化舵机。
-    *   `feedTapeAction(uint8_t feedLength)`: 核心喂料逻辑，控制舵机执行预定动作序列。
-    *   `servoTick()`: 软舵机库循环调用。
-*   **Feeder ID 管理 (`feeder_id_manager.cpp`, `feeder_id_manager.h`)**:
-    *   `initFeederID()`: 从 EEPROM 加载或使用默认 Feeder ID。
-    *   `saveFeederID()`: 保存 Feeder ID 到 EEPROM。
-    *   `getCurrentFeederID()`: 获取当前 Hand ID。
-    *   `processSerialCommand()`: 支持通过串口查询和设置 Feeder ID。
+![ESP32C3 SuperMini](doc/img/esp32C3.png)
 
-## 7. 配置 (`platformio.ini`, `src/brain/brain_config.h`, `src/hand/hand_config.h`)
-*   **`platformio.ini`**:
-    *   定义了 `env:esp32c3-brain` 和 `env:esp01s-hand` 两个环境。
-    *   详细指定了各自的平台、板子、框架、编译标志、库依赖和源文件过滤器。
-*   **`src/brain/brain_config.h`**:
-    *   `TOTAL_FEEDERS`: 系统支持的最大 Hand 数量。
-    *   `COMMAND_TIMEOUT_MS`, `HEARTBEAT_INTERVAL_MS`, `HAND_OFFLINE_TIMEOUT_MS`: 通信和状态管理相关超时参数。
-*   **`src/hand/hand_config.h`**:
-    *   `FEEDER_ID`: 当前 Hand 的 ID (重要，需唯一)。
-    *   `SERVO_PIN`: 舵机引脚。
-    *   舵机行为、测试及 EEPROM 相关配置。
+⚠️ **注意事项**：
+- 使用ESP32C3 需要安装 FTDI 驱动
+- 如果插上电脑不显示Com口，显示 "JTAG/serial debug unit"，请参考：
+  - [ESP32C3 SuperMini 驱动问题解决](https://www.nologo.tech/product/esp32/esp32c3/esp32c3supermini/esp32C3SuperMini.html#q3-%E6%8F%92%E4%B8%8A%E7%94%B5%E8%84%91%E4%B8%8D%E6%98%BE%E7%A4%BAcom%E5%8F%A3-%E6%98%BE%E7%A4%BA-jtag-serial-debug-unit)
+  - [使用Arduino给ESP32C3/S2/S3开发板下载程序](https://chat.nologo.tech/d/72/2)
 
-## 8. G-Code/M-Code 指令 (`src/brain/gcode.h`, `src/brain/gcode.cpp`)
-Brain 单元通过串口接收 G-code 格式的指令。
-*   `M600 N<feeder_id> F<feed_length> [X1]`: 执行喂料。
-*   `M610 [S<0|1>]`: 使能/禁用或查询喂料器状态。
-*   (部分其他 M-Code 在 `gcode.h` 中定义，具体实现在 `gcode.cpp` 中可能不完整或被注释)
+### 4.2 ESP01S 模块
+ESP01S 模块用作Hand单元，控制各个Feeder。**注意：记得买01s而不是01**
 
-## 9. 测试 (`test/` 目录)
-项目包含 Python 测试脚本，用于验证系统功能：
-*   **`auto_test_script.py`**: 自动化测试基本命令、舵机控制、喂料序列和错误处理。
-*   **`diagnostic_tool.py`**: 快速诊断系统状态和反馈系统。
-*   其他如 `hardware_test.cpp`, `test_feedback_system.py`, `test_manual_feed.py`。
+![ESP01S 模块](doc/img/esp01s.png)
 
-## 10. 目录结构
+### 4.3 ESP01S 烧录器
+你还需要一个烧录程序的座子来对ESP01S进行编程，可以在淘宝选购。
+
+![ESP01S 烧录器](doc/img/烧录器.png)
+
+**购买链接**：[固件下载器ESP-01烧录器](https://item.taobao.com/item.htm?abbucket=8&detail_redpacket_pop=true&id=646972167777&ltk2=1749533731880gkpjj05gxfptt2limj1ub&ns=1&priceTId=undefined&query=esp01s&skuId=4655609620303&spm=a21n57.1.hoverItem.12&utparam=%7B%22aplus_abtest%22%3A%22c8cbd779e89c62d188297ae29ec1e5d1%22%7D&xxc=taobaoSearch)
+
+## 5. 系统架构与技术详解
+如需了解详细的系统架构、通信协议、各模块逻辑和配置说明，请参阅：
+
+**📖 [系统架构与技术详解](doc/系统架构与技术详解.md)**
+
+该文档包含以下详细内容：
+- 系统架构和核心组件
+- ESP-NOW 通信协议详解
+- Brain 单元逻辑实现
+- Hand 单元逻辑实现  
+- 配置文件说明
+- G-Code/M-Code 指令规范
+
+## 6. 目录结构
 *   `src/`: 核心源代码。
     *   `brain/`: Brain (ESP32C3) 代码。
     *   `hand/`: Hand (ESP01S) 代码。
     *   `common/`: Brain 和 Hand 共用代码 (如协议定义)。
+*   `doc/`: 项目文档。
+    *   `img/`: 文档相关图片资源。
+*   `3D/`: 3D模型文件。
+*   `tools/`: 开发工具和脚本。
 *   `lib/`, `include/`: 库和头文件。
 *   `test/`: 测试脚本和代码。
 *   `demo/`: 示例或参考代码 (其中 `0816feeder` 是一个功能更复杂的独立喂料器项目，与当前 ESPNOW-PNP 架构不完全相同)。
 *   `platformio.ini`: PlatformIO 配置文件。
 
-## 11. 进一步分析和注意事项
+## 7. 如何使用本项目
+
+### 7.1 开发环境准备
+
+#### 安装 PlatformIO
+1. **安装 Visual Studio Code**
+   - 从 [官网](https://code.visualstudio.com/) 下载并安装 VS Code
+
+2. **安装 PlatformIO 扩展**
+   - 打开 VS Code
+   - 进入扩展市场 (Ctrl+Shift+X 或 Cmd+Shift+X)
+   - 搜索 "PlatformIO IDE" 并安装
+   - 重启 VS Code
+
+3. **验证安装**
+   - VS Code 左侧应出现 PlatformIO 图标
+   - 底部状态栏应显示 PlatformIO 相关按钮
+
+### 7.2 项目编译与上传
+
+#### 克隆项目
+```bash
+git clone https://github.com/your-username/ESPNOW-PNP.git
+cd ESPNOW-PNP
+```
+
+#### 打开项目
+1. 在 VS Code 中打开项目文件夹
+2. PlatformIO 会自动检测 `platformio.ini` 配置文件
+3. 等待依赖库自动下载完成
+
+#### 编译和上传
+
+**Brain 单元 (ESP32C3):**
+```bash
+# 编译 Brain 固件
+pio run -e esp32c3-brain
+
+# 上传到 ESP32C3 开发板
+pio run -e esp32c3-brain -t upload
+
+# 监控串口输出
+pio device monitor -e esp32c3-brain
+```
+
+**Hand 单元 (ESP01S):**
+```bash
+# 编译 Hand 固件
+pio run -e esp01s-hand
+
+# 上传到 ESP01S 模块
+pio run -e esp01s-hand -t upload
+
+# 监控串口输出
+pio device monitor -e esp01s-hand
+```
+
+### 7.3 硬件连接
+
+#### Brain 单元 (ESP32C3)
+- **串口连接**: USB 转串口模块连接到电脑
+- **LCD 显示**: I2C LCD1602 连接到 SDA/SCL 引脚
+- **电源**: 5V/3.3V 供电
+
+#### Hand 单元 (ESP01S)
+- **舵机连接**: 根据 `hand_config.h` 中的 `SERVO_PIN` 设置
+- **电源**: 3.3V 供电 (注意电流需求)
+- **编程**: 需要 ESP01S 编程器或适配板
+
+### 7.4 配置说明
+
+#### 配置 Feeder ID
+每个 Hand 单元需要唯一的 Feeder ID：
+
+1. **方法一**: 修改 `src/hand/hand_config.h` 中的 `FEEDER_ID`
+```cpp
+#define FEEDER_ID 1  // 修改为唯一ID (1-32)
+```
+
+2. **方法二**: 通过串口命令设置
+```
+SET_ID:5    // 设置 Feeder ID 为 5
+GET_ID      // 查询当前 Feeder ID
+```
+
+#### 调整超时参数
+在 `src/brain/brain_config.h` 中调整通信参数：
+```cpp
+#define COMMAND_TIMEOUT_MS 5000      // 命令超时时间
+#define HEARTBEAT_INTERVAL_MS 10000  // 心跳间隔
+#define HAND_OFFLINE_TIMEOUT_MS 30000 // Hand 离线判定时间
+```
+
+### 7.5 测试验证
+
+#### 基本功能测试
+1. **Brain 启动**: LCD 应显示启动信息和在线 Hand 数量
+2. **Hand 注册**: Hand 上电后会自动向 Brain 注册
+3. **心跳检测**: Brain 会定期发送心跳包检测 Hand 状态
+
+#### G-Code 命令测试
+通过串口工具向 Brain 发送命令：
+```gcode
+M600 N1 F10    ; 命令 Feeder ID=1 推进 10mm
+M610 S1        ; 启用所有喂料器
+M610 S0        ; 禁用所有喂料器
+M610           ; 查询喂料器状态
+```
+
+### 7.6 故障排除
+
+#### 常见问题
+1. **编译错误**: 确保安装了所有依赖库
+2. **上传失败**: 检查串口权限和波特率设置
+3. **ESP-NOW 通信失败**: 确认两个设备在同一 WiFi 信道
+4. **Hand 无法注册**: 检查 Feeder ID 是否冲突
+
+#### 调试技巧
+- 启用串口调试输出查看详细日志
+- 使用 PlatformIO 的串口监视器实时查看输出
+- 检查硬件连接和电源供应
+
+## 8. 进一步分析和注意事项
 *   **Hand 注册**: `CMD_HAND_REGISTER` 协议已定义，但具体实现流程需进一步确认。
-*   **MAC 地址管理**: 当前似乎依赖 Hand 响应心跳来动态管理，而非静态 MAC 列表。
+*   **MAC 地址管理**: 依赖 Hand 响应心跳来动态管理
 *   **G-code 完整性**: `gcode.cpp` 中部分 M-code 的实现可能与测试脚本或 `gcode.h` 定义存在差异，需确认最终支持的指令集。
 
-## 12. 免责声明
+## 9. 免责声明
 本项目按“原样”提供，不作任何明示或暗示的保证，包括但不限于对适销性、特定用途适用性和非侵权性的保证。在任何情况下，作者或版权持有人均不对任何索赔、损害或其他责任承担任何责任，无论是在合同诉讼、侵权行为还是其他方面，由软件或软件的使用或其他交易引起、产生或与之相关的。
+### 您可以自由更改源代码以满足您的需求，但请注意，修改后的代码可能不受原始作者的支持。
+### 请自行承担使用风险。
 
-您可以自由更改源代码以满足您的需求，但请注意，修改后的代码可能不受原始作者的支持。
-
-请自行承担使用风险。
-
-## 13. 贡献
+## 10. 贡献
 欢迎对此项目做出贡献！如果您有任何改进建议、错误修复或新功能，请随时创建 Pull Request 或提交 Issue。
 
 我们鼓励社区参与，并感谢所有帮助改进此项目的贡献者。
