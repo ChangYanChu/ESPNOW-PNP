@@ -41,27 +41,27 @@ static uint8_t receiver[] = {0x12, 0x34, 0x56, 0x78, 0x90, 0x12};
 
 void dataReceived(uint8_t *address, uint8_t *data, uint8_t len, signed int rssi, bool broadcast)
 {
-    Serial.print("Received: ");
-    Serial.printf("%.*s\n", len, data);
-    Serial.printf("RSSI: %d dBm\n", rssi);
-    Serial.printf("From: " MACSTR "\n", MAC2STR(address));
-    Serial.printf("%s\n", broadcast ? "Broadcast" : "Unicast");
+    DEBUG_PRINT("Received: ");
+    DEBUG_PRINTF("%.*s\n", len, data);
+    DEBUG_PRINTF("RSSI: %d dBm\n", rssi);
+    DEBUG_PRINTF("From: " MACSTR "\n", MAC2STR(address));
+    DEBUG_PRINTF("%s\n", broadcast ? "Broadcast" : "Unicast");
 
     // 检查数据长度是否符合协议包大小
     if (len == sizeof(ESPNowResponse))
     {
         ESPNowResponse *response = (ESPNowResponse *)data;
 
-        Serial.printf("Command Type: 0x%02X\n", response->commandType);
-        Serial.printf("Hand ID: %d\n", response->handId);
-        Serial.printf("Status: 0x%02X\n", response->status);
-        Serial.printf("Message: %.16s\n", response->message);
+        DEBUG_PRINTF("Command Type: 0x%02X\n", response->commandType);
+        DEBUG_PRINTF("Hand ID: %d\n", response->handId);
+        DEBUG_PRINTF("Status: 0x%02X\n", response->status);
+        DEBUG_PRINTF("Message: %.16s\n", response->message);
     }
     else if (len == sizeof(ESPNowPacket))
     {
         // 如果是命令包，存储到全局变量中
         ESPNowPacket *packet = (ESPNowPacket *)data;
-        Serial.printf("Received command: Type=0x%02X, FeederID=%d, Length=%d\n",
+        DEBUG_PRINTF("Received command: Type=0x%02X, FeederID=%d, Length=%d\n",
                       packet->commandType, packet->feederId, packet->feedLength);
 
         // 将接收到的命令数据存储到全局变量
@@ -73,7 +73,7 @@ void dataReceived(uint8_t *address, uint8_t *data, uint8_t len, signed int rssi,
     }
     else
     {
-        Serial.printf("Unknown packet size: %d bytes\n", len);
+        DEBUG_PRINTF("Unknown packet size: %d bytes\n", len);
     }
 }
 
@@ -83,13 +83,13 @@ void espnow_setup()
     WiFi.mode(WIFI_MODE_STA);
     WiFi.disconnect();
     
-    Serial.printf("MAC address: %s\n", WiFi.macAddress().c_str());
-    Serial.println("ESP-NOW initializing without WiFi connection...");
+    DEBUG_PRINTF("MAC address: %s\n", WiFi.macAddress().c_str());
+   DEBUG_PRINTLN("ESP-NOW initializing without WiFi connection...");
     
     quickEspNow.onDataRcvd(dataReceived);
     quickEspNow.begin(6); // 使用固定频道6启动ESP-NOW，与Brain端保持一致
     
-    Serial.println("ESP-NOW initialized on channel 6");
+   DEBUG_PRINTLN("ESP-NOW initialized on channel 6");
 }
 
 void esp_update()
@@ -103,11 +103,11 @@ void esp_update()
         String message = String(msg) + " " + String(counter++);
         if (!quickEspNow.send(DEST_ADDR, (uint8_t *)message.c_str(), message.length()))
         {
-            Serial.printf(">>>>>>>>>> Message sent\n");
+            DEBUG_PRINTF(">>>>>>>>>> Message sent\n");
         }
         else
         {
-            Serial.printf(">>>>>>>>>> Message not sent\n");
+            DEBUG_PRINTF(">>>>>>>>>> Message not sent\n");
         }
     }
 }
@@ -127,12 +127,12 @@ void processReceivedCommand()
     uint8_t myFeederID = getCurrentFeederID();
     if (receivedFeederID != myFeederID && receivedFeederID != 0xFF)
     { // 0xFF为广播ID
-        Serial.printf("Command not for this feeder (ID:%d, received:%d)\n",
+        DEBUG_PRINTF("Command not for this feeder (ID:%d, received:%d)\n",
                       myFeederID, receivedFeederID);
         return;
     }
 
-    Serial.printf("Processing command: Type=0x%02X, FeederID=%d, Length=%d\n",
+    DEBUG_PRINTF("Processing command: Type=0x%02X, FeederID=%d, Length=%d\n",
                   receivedCommandType, receivedFeederID, receivedFeedLength);
 
     switch (receivedCommandType)
@@ -146,7 +146,7 @@ void processReceivedCommand()
         break;
 
     default:
-        Serial.printf("Unknown command type: 0x%02X\n", receivedCommandType);
+        DEBUG_PRINTF("Unknown command type: 0x%02X\n", receivedCommandType);
         // sendErrorResponse(receivedFeederID, STATUS_INVALID_PARAM, "Unknown command");
         break;
     }
@@ -155,7 +155,7 @@ void processReceivedCommand()
 // 处理喂料推进命令
 void handleFeederAdvanceCommand(uint8_t feederID, uint8_t feedLength)
 {
-    Serial.printf("Handling feeder advance: ID=%d, Length=%d\n", feederID, feedLength);
+    DEBUG_PRINTF("Handling feeder advance: ID=%d, Length=%d\n", feederID, feedLength);
 
     // 这里添加实际的喂料逻辑
     // 例如：控制步进电机，检查传感器等
@@ -171,7 +171,7 @@ void handleFeederAdvanceCommand(uint8_t feederID, uint8_t feedLength)
 // 处理心跳命令
 void handleHeartbeatCommand()
 {
-    Serial.println("Received heartbeat, sending response");
+   DEBUG_PRINTLN("Received heartbeat, sending response");
     
     uint8_t myFeederID = getCurrentFeederID();
     schedulePendingResponse(myFeederID, STATUS_OK, "Online");
@@ -186,7 +186,7 @@ void schedulePendingResponse(uint8_t feederID, uint8_t status, const char *messa
     pendingResponseMessage[sizeof(pendingResponseMessage) - 1] = '\0';
     hasPendingResponse = true;
     
-    Serial.printf("Scheduled response: FeederID=%d, Status=0x%02X, Message=%s\n", 
+    DEBUG_PRINTF("Scheduled response: FeederID=%d, Status=0x%02X, Message=%s\n", 
                   feederID, status, message);
 }
 
@@ -201,7 +201,7 @@ void processPendingResponse()
     // 清除待发送标志
     hasPendingResponse = false;
 
-    Serial.printf("Processing pending response: FeederID=%d, Status=0x%02X, Message=%s\n",
+    DEBUG_PRINTF("Processing pending response: FeederID=%d, Status=0x%02X, Message=%s\n",
                   pendingResponseFeederID, pendingResponseStatus, (char*)pendingResponseMessage);
 
     // 根据状态发送相应的响应
@@ -227,21 +227,21 @@ void sendSuccessResponse(uint8_t feederID, const char *message)
     strncpy(response.message, message, sizeof(response.message) - 1);
     response.message[sizeof(response.message) - 1] = '\0';
 
-    Serial.printf("Hand sending ESPNowResponse:\n");
-    Serial.printf("  Size: %d bytes\n", sizeof(response));
-    Serial.printf("  Command Type: 0x%02X\n", response.commandType);
-    Serial.printf("  Hand ID: %d\n", response.handId);
-    Serial.printf("  Status: 0x%02X\n", response.status);
-    Serial.printf("  Message: %s\n", response.message);
+    DEBUG_PRINTF("Hand sending ESPNowResponse:\n");
+    DEBUG_PRINTF("  Size: %d bytes\n", sizeof(response));
+    DEBUG_PRINTF("  Command Type: 0x%02X\n", response.commandType);
+    DEBUG_PRINTF("  Hand ID: %d\n", response.handId);
+    DEBUG_PRINTF("  Status: 0x%02X\n", response.status);
+    DEBUG_PRINTF("  Message: %s\n", response.message);
 
     bool result = quickEspNow.send(DEST_ADDR, (uint8_t *)&response, sizeof(response));
     if (!result)
     {
-        Serial.printf("Success response sent from feeder %d\n", getCurrentFeederID());
+        DEBUG_PRINTF("Success response sent from feeder %d\n", getCurrentFeederID());
     }
     else
     {
-        Serial.printf("Failed to send success response from feeder %d\n", getCurrentFeederID());
+        DEBUG_PRINTF("Failed to send success response from feeder %d\n", getCurrentFeederID());
     }
 }
 
@@ -260,10 +260,10 @@ void sendErrorResponse(uint8_t feederID, uint8_t errorCode, const char *message)
     bool result = quickEspNow.send(DEST_ADDR, (uint8_t *)&response, sizeof(response));
     if (!result)
     {
-        Serial.printf("Error response sent for feeder %d\n", feederID);
+        DEBUG_PRINTF("Error response sent for feeder %d\n", feederID);
     }
     else
     {
-        Serial.printf("Failed to send error response for feeder %d\n", feederID);
+        DEBUG_PRINTF("Failed to send error response for feeder %d\n", feederID);
     }
 }

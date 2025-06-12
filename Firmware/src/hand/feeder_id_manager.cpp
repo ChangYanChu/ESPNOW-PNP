@@ -22,26 +22,26 @@ void initFeederID() {
         // 验证读取的ID是否有效（0-49范围内）
         if (storedID < TOTAL_FEEDERS) {
             currentFeederID = storedID;
-            Serial.printf("Feeder ID loaded from EEPROM: %d\n", currentFeederID);
+            DEBUG_PRINTF("Feeder ID loaded from EEPROM: %d\n", currentFeederID);
         } else {
-            Serial.printf("Invalid Feeder ID in EEPROM (%d), using default: %d\n", 
+            DEBUG_PRINTF("Invalid Feeder ID in EEPROM (%d), using default: %d\n", 
                          storedID, FEEDER_ID);
             currentFeederID = FEEDER_ID;
             saveFeederID(currentFeederID); // 保存默认值到EEPROM
         }
     } else {
         // EEPROM未初始化，使用默认值并保存
-        Serial.printf("EEPROM not initialized, using default Feeder ID: %d\n", FEEDER_ID);
+        DEBUG_PRINTF("EEPROM not initialized, using default Feeder ID: %d\n", FEEDER_ID);
         currentFeederID = FEEDER_ID;
         saveFeederID(currentFeederID);
     }
     
-    Serial.printf("Current Feeder ID: %d\n", currentFeederID);
+    DEBUG_PRINTF("Current Feeder ID: %d\n", currentFeederID);
 }
 
 bool saveFeederID(uint8_t feederID) {
     if (feederID >= TOTAL_FEEDERS) {
-        Serial.printf("Invalid Feeder ID: %d (must be 0-%d)\n", feederID, TOTAL_FEEDERS - 1);
+        DEBUG_PRINTF("Invalid Feeder ID: %d (must be 0-%d)\n", feederID, TOTAL_FEEDERS - 1);
         return false;
     }
     
@@ -51,9 +51,9 @@ bool saveFeederID(uint8_t feederID) {
     bool success = EEPROM.commit();
     if (success) {
         currentFeederID = feederID;
-        Serial.printf("Feeder ID saved to EEPROM: %d\n", feederID);
+        DEBUG_PRINTF("Feeder ID saved to EEPROM: %d\n", feederID);
     } else {
-        Serial.println("Failed to save Feeder ID to EEPROM");
+        DEBUG_PRINTLN("Failed to save Feeder ID to EEPROM");
     }
     
     return success;
@@ -75,39 +75,39 @@ void processSerialCommand() {
             
             if (newID >= 0 && newID < TOTAL_FEEDERS) {
                 if (saveFeederID((uint8_t)newID)) {
-                    Serial.printf("Feeder ID changed to: %d\n", newID);
-                    Serial.println("Restart required for ESP-NOW registration");
+                    DEBUG_PRINTF("Feeder ID changed to: %d\n", newID);
+                    DEBUG_PRINTLN("Restart required for ESP-NOW registration");
                     ESP.restart(); // 重启ESP以应用新ID
                 } else {
-                    Serial.println("Failed to save new Feeder ID");
+                    DEBUG_PRINTLN("Failed to save new Feeder ID");
                 }
             } else {
-                Serial.printf("Invalid ID: %d (must be 0-%d)\n", newID, TOTAL_FEEDERS - 1);
+                DEBUG_PRINTF("Invalid ID: %d (must be 0-%d)\n", newID, TOTAL_FEEDERS - 1);
             }
         }
         else if (command == "GET_ID") {
-            Serial.printf("Current Feeder ID: %d\n", getCurrentFeederID());
+            DEBUG_PRINTF("Current Feeder ID: %d\n", getCurrentFeederID());
         }
         else if (command == "RESET_ID") {
             if (saveFeederID(FEEDER_ID)) {
-                Serial.printf("Feeder ID reset to default: %d\n", FEEDER_ID);
+                DEBUG_PRINTF("Feeder ID reset to default: %d\n", FEEDER_ID);
             }
         }
         else if (command == "HELP" || command == "?") {
             printHelp();
         }
         else if (command.length() > 0) {
-            Serial.printf("Unknown command: %s\n", command.c_str());
-            Serial.println("Type 'HELP' for available commands");
+            DEBUG_PRINTF("Unknown command: %s\n", command.c_str());
+            DEBUG_PRINTLN("Type 'HELP' for available commands");
         }
     }
 }
 
 void printHelp() {
-    Serial.println("\n=== Feeder ID Manager Commands ===");
-    Serial.println("SET_ID <id>  - Set new Feeder ID (0-49)");
-    Serial.println("GET_ID       - Show current Feeder ID");
-    Serial.println("RESET_ID     - Reset to default Feeder ID");
-    Serial.println("HELP or ?    - Show this help");
-    Serial.println("=====================================\n");
+    DEBUG_PRINTLN("\n=== Feeder ID Manager Commands ===");
+    DEBUG_PRINTLN("SET_ID <id>  - Set new Feeder ID (0-49)");
+    DEBUG_PRINTLN("GET_ID       - Show current Feeder ID");
+    DEBUG_PRINTLN("RESET_ID     - Reset to default Feeder ID");
+    DEBUG_PRINTLN("HELP or ?    - Show this help");
+    DEBUG_PRINTLN("=====================================\n");
 }

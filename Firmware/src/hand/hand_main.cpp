@@ -3,13 +3,39 @@
 #include "feeder_id_manager.h"
 #include "hand_espnow.h"
 #include "hand_servo.h"
+#include "hand_led.h"
+#include "hand_button.h"
+
+// 按钮双击回调函数
+void onFeedButtonDoubleClick() {
+    DEBUG_PRINTLN("Button double-clicked - Feeding once");
+    
+    // 执行送料动作
+    feedOnce();
+    
+    // 启动LED闪烁指示
+    startLEDBlink(LED_BLINK_FEED, 3);
+}
+
+
 void setup()
 {
-    Serial.begin(115200);
+#if DEBUG_MODE
+    DEBUG_BEGIN(115200);
     delay(1000);
 
-    Serial.println("\n=== Hand Controller Starting ===");
-    Serial.printf("Version: %s\n", HAND_VERSION);
+    DEBUG_PRINTLN("\n=== Hand Controller Starting ===");
+    DEBUG_PRINTF("Version: %s\n", HAND_VERSION);
+#else
+    // 正常模式下，GPIO1可用作LED等其他用途
+    pinMode(1, OUTPUT); // 例如作为状态LED
+#endif
+
+    // 初始化按钮并设置回调
+    initButton();
+    setButtonDoubleClickCallback(onFeedButtonDoubleClick);
+    
+    DEBUG_PRINTLN("Button initialized on GPIO3");
 
     // 初始化Feeder ID管理器
     initFeederID();
@@ -19,21 +45,25 @@ void setup()
 
     setup_Servo();
 
-    Serial.println("=== Setup Complete ===");
-    Serial.println("Type 'HELP' for available commands");
+#if DEBUG_MODE
+    DEBUG_PRINTLN("=== Setup Complete ===");
+    DEBUG_PRINTLN("Type 'HELP' for available commands");
+    DEBUG_PRINTLN("Double-click button to feed once");
+#endif
 }
 
 void loop()
 {
-
-    // 必须频繁调用舵机tick
-    servoTick();
+    // 处理按钮事件
+    handleButton();
     
-    // 处理串口命令
-    processSerialCommand();
+    // 处理LED状态
+    handleLED();
+
+    // 调用舵机tick
+    servoTick();
 
     // 处理ESP-NOW
-    // esp_update();
     processReceivedCommand();
     processPendingResponse(); // 处理待发送的响应
 

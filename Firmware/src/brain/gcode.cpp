@@ -5,9 +5,9 @@
 String inputBuffer = ""; // Buffer for incoming G-Code lines
 
 // Add these lines if not already defined elsewhere:
-#define ENABLED 1
-#define DISABLED 0
-uint8_t feederEnabled = DISABLED;
+#define FEEDER_ENABLED 1
+#define FEEDER_DISABLED 0
+uint8_t feederEnabled = FEEDER_DISABLED;
 
 // Function to check if the feeder number is valid
 bool validFeederNo(int8_t signedFeederNo, uint8_t feederNoMandatory = 0)
@@ -36,37 +36,68 @@ bool validFeederNo(int8_t signedFeederNo, uint8_t feederNoMandatory = 0)
 void sendAnswer(uint8_t error, String message)
 {
     String response;
-    if (error == 0) {
+    if (error == 0)
+    {
         Serial.print(F("ok "));
         response = "ok " + message;
-    } else {
+    }
+    else
+    {
         Serial.print(F("error "));
         response = "error " + message;
     }
 
     Serial.println(message);
-    
-    // 更新LCD显示响应状态
-    lcd_update_gcode("", response.c_str());
+
+    // 添加防抖逻辑，避免短时间内重复更新LCD
+    static unsigned long last_lcd_update = 0;
+    static String last_response = "";
+    unsigned long now = millis();
+
+    // 只在响应内容改变或距离上次更新超过200ms时才更新LCD
+    if (response != last_response || (now - last_lcd_update > 200))
+    {
+        lcd_update_gcode("", response.c_str());
+        last_lcd_update = now;
+        last_response = response;
+    }
 }
 
 void sendAnswer(int error, const __FlashStringHelper *message)
 {
-    String response;
+    // 构建响应
+    String response = "";
+    String msg = String(message); // 正确转换FlashStringHelper
+
     if (error == 0)
     {
-        Serial.print("ok ");
-        response = "ok " + String(message);
+        Serial.print(F("ok "));
+        response = "ok";
+        if (msg.length() > 0)
+        {
+            response += " " + msg;
+        }
     }
     else
     {
-        Serial.print("error ");
-        response = "error " + String(message);
+        Serial.print(F("error "));
+        response = "error " + msg;
     }
-    Serial.println(message);
-    
-    // 更新LCD显示响应状态
-    lcd_update_gcode("", response.c_str());
+
+    Serial.println(msg);
+
+    // 添加防抖逻辑，避免短时间内重复更新LCD
+    static unsigned long last_lcd_update = 0;
+    static String last_response = "";
+    unsigned long now = millis();
+
+    // 只在响应内容改变或距离上次更新超过200ms时才更新LCD
+    if (response != last_response || (now - last_lcd_update > 200))
+    {
+        lcd_update_gcode("", response.c_str());
+        last_lcd_update = now;
+        last_response = response;
+    }
 }
 
 /**
@@ -101,7 +132,8 @@ float parseParameter(char code, float defaultVal)
 void processCommand()
 {
     // 在LCD上显示接收到的G-code命令
-    if (inputBuffer.length() > 0) {
+    if (inputBuffer.length() > 0)
+    {
         lcd_update_gcode(inputBuffer.c_str(), "");
     }
 
@@ -123,20 +155,12 @@ void processCommand()
 
             if ((uint8_t)_feederEnabled == 1)
             {
-                // digitalWrite(FEEDER_ENABLE_PIN, HIGH);
-                feederEnabled = ENABLED;
-
-                // executeCommandOnAllFeeder(cmdEnable);
-
+                feederEnabled = FEEDER_ENABLED;
                 sendAnswer(0, F("Feeder set enabled and operational"));
             }
             else
             {
-                // digitalWrite(FEEDER_ENABLE_PIN, LOW);
-                feederEnabled = DISABLED;
-
-                // executeCommandOnAllFeeder(cmdDisable);
-
+                feederEnabled = FEEDER_DISABLED;
                 sendAnswer(0, F("Feeder set disabled"));
             }
         }
@@ -155,7 +179,7 @@ void processCommand()
     case MCODE_ADVANCE: // M600 N0 F12 X1
     {
         // 1st to check: are feeder enabled?
-        if (feederEnabled != ENABLED)
+        if (feederEnabled != FEEDER_ENABLED)
         {
             sendAnswer(1, String(String("Enable feeder first!") + String(MCODE_SET_FEEDER_ENABLE) + String(" S1")));
             break;
@@ -343,10 +367,10 @@ void listenToSerialStream()
         // get the received byte, convert to char for adding to buffer
         char receivedChar = (char)Serial.read();
 
-        // print back for debugging
-        #ifdef DEBUG
+// print back for debugging
+#ifdef DEBUG
         Serial.print(receivedChar);
-        #endif
+#endif
 
         // add to buffer
         inputBuffer += receivedChar;

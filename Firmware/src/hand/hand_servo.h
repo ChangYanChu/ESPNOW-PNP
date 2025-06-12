@@ -10,5 +10,6 @@ void setup_Servo();
 void testServoOnStartup(); // 开机测试舵机
 void feedTapeAction(uint8_t feedLength);
 void servoTick(); // 需要在主循环中调用
+void feedOnce();
 
 #endif
