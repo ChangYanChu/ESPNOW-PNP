@@ -48,7 +48,7 @@ void sendAnswer(uint8_t error, String message)
     }
 
     Serial.println(message);
-
+#if HAS_LCD
     // 添加防抖逻辑，避免短时间内重复更新LCD
     static unsigned long last_lcd_update = 0;
     static String last_response = "";
@@ -61,6 +61,7 @@ void sendAnswer(uint8_t error, String message)
         last_lcd_update = now;
         last_response = response;
     }
+#endif
 }
 
 void sendAnswer(int error, const __FlashStringHelper *message)
@@ -85,7 +86,7 @@ void sendAnswer(int error, const __FlashStringHelper *message)
     }
 
     Serial.println(msg);
-
+#if HAS_LCD
     // 添加防抖逻辑，避免短时间内重复更新LCD
     static unsigned long last_lcd_update = 0;
     static String last_response = "";
@@ -98,6 +99,7 @@ void sendAnswer(int error, const __FlashStringHelper *message)
         last_lcd_update = now;
         last_response = response;
     }
+#endif
 }
 
 /**
@@ -131,11 +133,13 @@ float parseParameter(char code, float defaultVal)
  */
 void processCommand()
 {
+#if HAS_LCD
     // 在LCD上显示接收到的G-code命令
     if (inputBuffer.length() > 0)
     {
         lcd_update_gcode(inputBuffer.c_str(), "");
     }
+#endif // HAS_LCD
 
     // get the command, default -1 if no command found
     int cmd = parseParameter('M', -1);

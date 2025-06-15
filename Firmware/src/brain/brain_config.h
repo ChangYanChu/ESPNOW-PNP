@@ -11,6 +11,10 @@
 #define BRAIN_VERSION "1.0.0"
 #define SERIAL_BAUD 115200
 
+// LCD硬件支持配置
+// 设置为 1 启用LCD显示，设置为 0 禁用LCD（适用于没有LCD硬件的brain）
+#define HAS_LCD 0  // 1=有LCD硬件, 0=无LCD硬件
+
 // G-code处理器配置
 #define MAX_GCODE_LINE_LENGTH 64
 #define GCODE_BUFFER_SIZE 128

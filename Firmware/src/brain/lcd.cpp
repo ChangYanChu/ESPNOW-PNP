@@ -1,6 +1,6 @@
 
 #include "lcd.h"
-#include "brain_config.h"
+#if HAS_LCD
 #include <LCDI2C_Multilingual_MCD.h>
 #include <WiFi.h>
 
@@ -196,9 +196,12 @@ void lcd_show_status(int online, int total, unsigned long uptime)
         // 只在心跳状态改变时更新
         if (last_heartbeat != heartbeat_animation)
         {
-            if (heartbeat_animation) {
+            if (heartbeat_animation)
+            {
                 lcd.write(3); // 使用心形图标
-            } else {
+            }
+            else
+            {
                 lcd.print(" ");
             }
             last_heartbeat = heartbeat_animation;
@@ -271,15 +274,15 @@ void lcd_show_gcode(const char *command, const char *status)
 {
     // 清屏并显示G-code信息
     lcd.clear();
-    
+
     if (strlen(status) > 0)
     {
         // 显示状态信息
         lcd.setCursor(0, 0);
-        
+
         // 检查是否是Feed相关的状态消息
         String statusStr = String(status);
-        
+
         // 处理包含 "Feed N" 的状态消息
         if (statusStr.indexOf("Feed N") >= 0)
         {
@@ -290,7 +293,7 @@ void lcd_show_gcode(const char *command, const char *status)
                 static unsigned long last_scroll_time = 0;
                 static int scroll_offset = 0;
                 unsigned long now = millis();
-                
+
                 if (now - last_scroll_time > 800) // 每800ms滚动一次
                 {
                     if (scroll_offset + 16 >= statusStr.length())
@@ -303,10 +306,10 @@ void lcd_show_gcode(const char *command, const char *status)
                     }
                     last_scroll_time = now;
                 }
-                
+
                 String displayText = statusStr.substring(scroll_offset, scroll_offset + 16);
                 lcd.print(displayText);
-                
+
                 // 在右下角显示滚动指示器
                 lcd.setCursor(15, 1);
                 lcd.print(">");
@@ -330,7 +333,7 @@ void lcd_show_gcode(const char *command, const char *status)
                 lcd.print(shortStatus);
             }
         }
-        
+
         // 第二行显示命令（如果有）
         if (strlen(command) > 0)
         {
@@ -452,3 +455,5 @@ void triggerHeartbeatAnimation()
         lcd.write(3);         // 显示心形图标
     }
 }
+
+#endif // HAS_LCD

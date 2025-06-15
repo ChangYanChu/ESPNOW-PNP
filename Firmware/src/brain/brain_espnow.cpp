@@ -125,7 +125,9 @@ void processReceivedResponse()
             // 心跳响应，只记录时间，不发送G-code响应，不清除等待状态
             // Serial.printf("Heartbeat response from Hand %d\n", receivedHandID);
             // 触发心跳动画更新
+            #if HAS_LCD
             triggerHeartbeatAnimation();
+            #endif
         }
         else
         {
@@ -161,7 +163,9 @@ void processReceivedResponse()
     {
         // 心跳响应（备用方案，如果直接使用CMD_HEARTBEAT响应）
         // Serial.printf("Direct heartbeat response from Hand %d\n", receivedHandID);
+#if HAS_LCD
         triggerHeartbeatAnimation();
+#endif
     }
     else
     {
@@ -248,8 +252,9 @@ void espnow_setup()
     // Serial.println("ESP-NOW initializing without WiFi connection...");
 
     // 直接更新LCD显示ESP-NOW就绪状态
+    #if HAS_LCD
     lcd_update_system_status(SYSTEM_ESPNOW_READY);
-
+    #endif
     quickEspNow.onDataRcvd(dataReceived);
     quickEspNow.begin(6); // 使用固定频道6启动ESP-NOW
 

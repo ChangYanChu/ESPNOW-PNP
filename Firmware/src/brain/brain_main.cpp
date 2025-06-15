@@ -8,14 +8,16 @@ void setup()
 {
     // 初始化串口
     Serial.begin(115200);
-    while (!Serial && millis() < 5000)
-        ;
-
-    // Serial.println("ESP-NOW PNP Brain Controller Starting...");
-
-    // 初始化LCD
+    delay(1000); // 等待串口稳定
+    Serial.println("ESP-NOW PNP Brain Controller Starting...");
+#if HAS_LCD
+    // 只有在有LCD硬件时才初始化LCD
     lcd_setup();
     lcd_update_system_status(SYSTEM_INIT);
+    Serial.println("LCD initialized");
+#else
+    Serial.println("Running without LCD display");
+#endif
 
     // 初始化ESP-NOW通信
     // Serial.println("Initializing ESP-NOW...");
@@ -24,8 +26,9 @@ void setup()
     // 初始化feeder状态数组
     initFeederStatus();
 
-    // Serial.println("System ready!");
+#if HAS_LCD
     lcd_update_system_status(SYSTEM_RUNNING);
+#endif
 
     // 等待系统稳定
     delay(200);
@@ -33,8 +36,10 @@ void setup()
 
 void loop()
 {
-    // 更新LCD显示 (放在最前面确保及时更新)
+#if HAS_LCD
+    // 更新LCD显示 (只有在有LCD时才调用)
     lcd_update();
+#endif
 
     // 处理串口G-code命令
     listenToSerialStream();
@@ -51,15 +56,16 @@ void loop()
     // 发送心跳包检测Hand在线状态
     sendHeartbeat();
 
-    // 更新在线手部数量
+#if HAS_LCD
+    // 更新在线手部数量 (只有在有LCD时才需要)
     static unsigned long last_hand_count_update = 0;
     if (millis() - last_hand_count_update > 5000)
-    { // 每5秒更新一次
+    {
         int onlineHands = getOnlineHandCount();
         lcd_update_hand_count(onlineHands, TOTAL_FEEDERS);
         last_hand_count_update = millis();
     }
-
+#endif
     // 添加一个小延迟以避免过度占用CPU
     delay(1);
 }
