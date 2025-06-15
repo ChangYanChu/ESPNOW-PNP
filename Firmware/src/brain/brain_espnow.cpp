@@ -346,3 +346,25 @@ bool sendFeederAdvanceCommand(uint8_t feederId, uint8_t feedLength, uint32_t tim
         return false;
     }
 }
+
+// 获取在线Hand详细信息
+void getOnlineHandDetails(String &response)
+{
+    uint32_t now = millis();
+    int onlineCount = 0;
+    response = "Online Hands: ";
+
+    for (int i = 0; i < TOTAL_FEEDERS; i++)
+    {
+        if (lastHandResponse[i] > 0 && (now - lastHandResponse[i] < HAND_OFFLINE_TIMEOUT))
+        {
+            if (onlineCount > 0) {
+                response += ", ";
+            }
+            response += "N" + String(i);
+            onlineCount++;
+        }
+    }
+
+    response += " (Total: " + String(onlineCount) + ")";
+}

@@ -14,8 +14,15 @@ bool sendFeederAdvanceCommand(uint8_t feederId, uint8_t feedLength, uint32_t tim
 
 void initFeederStatus();
 
+//  获取在线手部数量
+int getOnlineHandCount();
+
+// 获取在线Hand详细信息
+void getOnlineHandDetails(String &response);
+
 // 添加按设备管理的状态结构
-struct FeederStatus {
+struct FeederStatus
+{
     bool waitingForResponse;
     uint32_t commandSentTime;
     uint32_t timeoutMs;

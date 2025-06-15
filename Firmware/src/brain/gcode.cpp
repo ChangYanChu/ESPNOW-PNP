@@ -243,6 +243,13 @@ void processCommand()
         break;
     }
 
+    case MCODE_GET_FEEDER_ID: // M620 N0
+    {
+        String response;
+        getOnlineHandDetails(response);
+        sendAnswer(0, response);
+        break;
+    }
         // case MCODE_RETRACT_POST_PICK:
         // {
         //     // 1st to check: are feeder enabled?
