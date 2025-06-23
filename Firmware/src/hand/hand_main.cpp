@@ -43,6 +43,7 @@ void setup()
     // 初始化ESP-NOW
     espnow_setup();
 
+    // 初始化舵机
     setup_Servo();
 
 #if DEBUG_MODE
