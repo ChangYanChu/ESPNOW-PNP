@@ -21,6 +21,7 @@ static int gcode_scroll_offset = 0;                // 用于滚动显示
 static unsigned long heartbeat_animation_time = 0; // 心跳动画时间
 static bool heartbeat_animation_active = false;    // 心跳动画活动状态
 static bool heartbeat_animation = false;           // 心跳动画状态
+static bool tcp_connected = false;                 // TCP连接状态
 
 // 自定义字符定义
 // 自定义字符定义
@@ -65,16 +66,40 @@ uint8_t heart_char[8] = {
     0b00000,
     0b00000};
 
+// TCP连接图标 - 实心圆点
+uint8_t tcp_connected_char[8] = {
+    0b00000,
+    0b00000,
+    0b01110,
+    0b11111,
+    0b11111,
+    0b01110,
+    0b00000,
+    0b00000};
+
+// TCP断开图标 - 空心圆点
+uint8_t tcp_disconnected_char[8] = {
+    0b00000,
+    0b00000,
+    0b01110,
+    0b10001,
+    0b10001,
+    0b01110,
+    0b00000,
+    0b00000};
+
 void lcd_setup()
 {
     lcd.init();
     lcd.backlight();
 
     // 创建自定义字符
-    lcd.createChar(0, wifi_char);  // WiFi图标
-    lcd.createChar(1, ok_char);    // 成功图标
-    lcd.createChar(2, error_char); // 错误图标
-    lcd.createChar(3, heart_char); // 心形图标
+    lcd.createChar(0, wifi_char);              // WiFi图标
+    lcd.createChar(1, ok_char);                // 成功图标
+    lcd.createChar(2, error_char);             // 错误图标
+    lcd.createChar(3, heart_char);             // 心形图标
+    lcd.createChar(4, tcp_connected_char);     // TCP连接图标
+    lcd.createChar(5, tcp_disconnected_char);  // TCP断开图标
 
     startup_time = millis();
     lcd_show_startup();
@@ -151,7 +176,6 @@ void lcd_show_system_info()
 void lcd_show_status(int online, int total, unsigned long uptime)
 {
     // 使用静态变量记录上次显示的内容，避免不必要的更新
-
     static unsigned long last_uptime = 0;
     static bool last_heartbeat = false;
 
@@ -178,6 +202,17 @@ void lcd_show_status(int online, int total, unsigned long uptime)
     else
     {
         lcd.write(2); // 全部离线 - 错误图标
+    }
+
+    // TCP连接状态显示（在第13位置）- 每次都更新显示
+    lcd.setCursor(13, 0);
+    if (tcp_connected)
+    {
+        lcd.write(4); // TCP连接图标 - 实心圆点
+    }
+    else
+    {
+        lcd.write(5); // TCP断开图标 - 空心圆点
     }
 
     // 心跳动画（在最后一个位置）- 独立更新
@@ -453,6 +488,28 @@ void triggerHeartbeatAnimation()
     {
         lcd.setCursor(15, 0); // 心跳指示器位置 (最后一列)
         lcd.write(3);         // 显示心形图标
+    }
+}
+
+void lcd_update_tcp_status(bool connected)
+{
+    tcp_connected = connected;
+    Serial.printf("LCD TCP status updated: %s\n", connected ? "Connected" : "Disconnected");
+    
+    // 如果在状态显示模式，立即更新TCP状态指示器
+    if (current_mode == LCD_MODE_STATUS)
+    {
+        lcd.setCursor(13, 0); // TCP状态指示器位置
+        if (connected)
+        {
+            lcd.write(4); // TCP连接图标 - 实心圆点
+            Serial.println("LCD: Displaying solid circle for TCP connected");
+        }
+        else
+        {
+            lcd.write(5); // TCP断开图标 - 空心圆点
+            Serial.println("LCD: Displaying hollow circle for TCP disconnected");
+        }
     }
 }
 

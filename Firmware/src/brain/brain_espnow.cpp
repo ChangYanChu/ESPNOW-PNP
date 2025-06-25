@@ -364,12 +364,19 @@ void espnow_setup()
     // 设置为Station模式但不连接WiFi，仅用于ESP-NOW通信
     WiFi.mode(WIFI_MODE_STA);
     // WiFi.disconnect();
-    WiFi.begin("HUAWEI-P99", "12345678");
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     while (WiFi.status() != WL_CONNECTED)
     {
         delay(500);
         Serial.print(".");
     }
+    
+#if WIFI_POWER_MAX
+    // 设置WiFi功率到最大 (ESP32: 20.5dBm, ESP8266: 20.5dBm)
+    WiFi.setTxPower(WIFI_POWER_19_5dBm); // ESP32最大功率
+    Serial.println("WiFi power set to maximum");
+#endif
+    
     Serial.printf("Connected to %s in channel %d\n", WiFi.SSID().c_str(), WiFi.channel());
     Serial.printf("IP address: %s\n", WiFi.localIP().toString().c_str());
     Serial.printf("MAC address: %s\n", WiFi.macAddress().c_str());

@@ -37,6 +37,11 @@
 #define HEARTBEAT_INTERVAL_MS 5000
 #define HAND_OFFLINE_TIMEOUT_MS 10000
 
+// WiFi配置
+#define WIFI_SSID "HONOR"
+#define WIFI_PASSWORD "chu107610."
+#define WIFI_POWER_MAX true  // 设置WiFi功率到最大
+
 // 手部MAC地址配置 (需要根据实际ESP01S填写)
 extern uint8_t hand_mac_addresses[MAX_HANDS][6];
 

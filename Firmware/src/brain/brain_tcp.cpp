@@ -1,5 +1,6 @@
 #include "brain_tcp.h"
 #include "gcode.h"
+#include "lcd.h"
 #include <WiFi.h>
 
 WiFiServer server(8080);
@@ -29,6 +30,10 @@ void tcp_loop() {
             // 发送欢迎消息
             currentClient.println("ok connected to Brain TCP Server");
             currentClient.flush();
+            
+            // 通知LCD更新TCP连接状态
+            lcd_update_tcp_status(true);
+            Serial.println("LCD notified: TCP client connected");
         } else {
             // 如果已有客户端连接，拒绝新连接
             WiFiClient newClient = server.available();
@@ -73,6 +78,10 @@ void tcp_loop() {
         Serial.println("Client Disconnected");
         currentClient.stop();
         currentClient = WiFiClient(); // 重置客户端
+        
+        // 通知LCD更新TCP连接状态
+        lcd_update_tcp_status(false);
+        Serial.println("LCD notified: TCP client disconnected");
     }
 }
 
@@ -82,4 +91,9 @@ WiFiClient* getCurrentTcpClient() {
         return &currentClient;
     }
     return nullptr;
+}
+
+// 检查TCP客户端是否连接
+bool isTcpClientConnected() {
+    return currentClient && currentClient.connected();
 }

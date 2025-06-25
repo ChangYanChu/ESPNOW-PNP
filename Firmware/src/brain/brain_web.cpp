@@ -52,12 +52,12 @@ String getFeederStatusJSON() {
     doc["timestamp"] = now;
     
     // Debug output
-    Serial.printf("Web API - Online: %d, SessionFeeds: %lu, WorkCount: %lu\n", 
-                  getOnlineHandCount(), totalSessionFeeds, totalWorkCount);
+    // Serial.printf("Web API - Online: %d, SessionFeeds: %lu, WorkCount: %lu\n", 
+    //               getOnlineHandCount(), totalSessionFeeds, totalWorkCount);
     
     String result;
     serializeJson(doc, result);
-    Serial.printf("JSON Response Length: %d\n", result.length());
+    // Serial.printf("JSON Response Length: %d\n", result.length());
     return result;
 }
 

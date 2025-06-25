@@ -33,6 +33,7 @@ void lcd_update_system_status(SystemStatus status);
 void lcd_update_hand_count(int online, int total);
 void lcd_update_gcode(const char* command, const char* status = "");
 void triggerHeartbeatAnimation();
+void lcd_update_tcp_status(bool connected); // 新增TCP状态更新函数
 
 #else
 // 没有LCD时的空实现（内联函数，不会产生额外开销）
@@ -54,6 +55,7 @@ inline void lcd_update_gcode(const char* command, const char* status = "") {
     (void)command; (void)status; 
 }
 inline void triggerHeartbeatAnimation() {}
+inline void lcd_update_tcp_status(bool connected) { (void)connected; } // 新增TCP状态更新空实现
 
 #endif // HAS_LCD
 
