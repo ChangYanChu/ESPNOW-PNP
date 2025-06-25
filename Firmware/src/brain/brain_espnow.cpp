@@ -95,9 +95,24 @@ void dataReceived(uint8_t *address, uint8_t *data, uint8_t len, signed int rssi,
 
         // Serial.printf("Brain stored response data, hasNewResponse=true\n");
     }
+    else if (len == sizeof(ESPNowPacket))
+    {
+        // 处理来自Hand的命令包（如发现请求）
+        ESPNowPacket *packet = (ESPNowPacket *)data;
+        
+        // Serial.printf("Brain received ESPNowPacket:\n");
+        // Serial.printf("  Command Type: 0x%02X\n", packet->commandType);
+        // Serial.printf("  Feeder ID: %d\n", packet->feederId);
+        
+        if (packet->commandType == CMD_DISCOVERY)
+        {
+            // 处理发现请求，立即发送响应
+            handleDiscoveryRequest(packet->feederId);
+        }
+    }
     else
     {
-        // Serial.printf("Brain: Unknown packet size: %d bytes (expected %d for ESPNowResponse)\n",
+        // Serial.printf("Brain: Unknown packet size: %d bytes\n", len);
         //  len, sizeof(ESPNowResponse));
     }
 }
@@ -122,12 +137,12 @@ void processReceivedResponse()
         // 检查是否为心跳响应（通过消息内容判断）
         if (strcmp((char *)receivedMessage, "Online") == 0)
         {
-            // 心跳响应，只记录时间，不发送G-code响应，不清除等待状态
-            // Serial.printf("Heartbeat response from Hand %d\n", receivedHandID);
-            // 触发心跳动画更新
-            #if HAS_LCD
+// 心跳响应，只记录时间，不发送G-code 响应，不清除等待状态
+// Serial.printf("Heartbeat response from Hand %d\n", receivedHandID);
+// 触发心跳动画更新
+#if HAS_LCD
             triggerHeartbeatAnimation();
-            #endif
+#endif
         }
         else
         {
@@ -246,18 +261,31 @@ void espnow_setup()
 {
     // 设置为Station模式但不连接WiFi，仅用于ESP-NOW通信
     WiFi.mode(WIFI_MODE_STA);
-    WiFi.disconnect();
+    // WiFi.disconnect();
+    WiFi.begin("HUAWEI-P99", "12345678");
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.printf("Connected to %s in channel %d\n", WiFi.SSID().c_str(), WiFi.channel());
+    Serial.printf("IP address: %s\n", WiFi.localIP().toString().c_str());
+    Serial.printf("MAC address: %s\n", WiFi.macAddress().c_str());
 
-    // Serial.printf("MAC address: %s\n", WiFi.macAddress().c_str());
-    // Serial.println("ESP-NOW initializing without WiFi connection...");
+// Serial.printf("MAC address: %s\n", WiFi.macAddress().c_str());
+// Serial.println("ESP-NOW initializing without WiFi connection...");
 
-    // 直接更新LCD显示ESP-NOW就绪状态
-    #if HAS_LCD
+// 直接更新LCD显示ESP-NOW就绪状态
+#if HAS_LCD
     lcd_update_system_status(SYSTEM_ESPNOW_READY);
-    #endif
+#endif
     quickEspNow.onDataRcvd(dataReceived);
-    quickEspNow.begin(6); // 使用固定频道6启动ESP-NOW
+    // quickEspNow.begin(6); // 使用固定频道6启动ESP-NOW
+    // quickEspNow.begin(); // 使用固定频道6启动ESP-NOW
 
+     // 确保ESP-NOW使用与WiFi相同的频道
+    int wifiChannel = WiFi.channel();
+    quickEspNow.begin(wifiChannel);
     // Serial.println("ESP-NOW initialized on channel 6");
 }
 
@@ -358,7 +386,8 @@ void getOnlineHandDetails(String &response)
     {
         if (lastHandResponse[i] > 0 && (now - lastHandResponse[i] < HAND_OFFLINE_TIMEOUT))
         {
-            if (onlineCount > 0) {
+            if (onlineCount > 0)
+            {
                 response += ", ";
             }
             response += "N" + String(i);
@@ -367,4 +396,33 @@ void getOnlineHandDetails(String &response)
     }
 
     response += " (Total: " + String(onlineCount) + ")";
+}
+
+// 处理来自Hand的发现请求
+void handleDiscoveryRequest(uint8_t feederID)
+{
+    // Serial.printf("Received discovery request from Feeder ID: %d\n", feederID);
+    
+    // 创建发现响应
+    ESPNowResponse discoveryResponse;
+    discoveryResponse.handId = feederID;
+    discoveryResponse.commandType = CMD_RESPONSE;
+    discoveryResponse.status = STATUS_OK;
+    discoveryResponse.sequence = 0;
+    discoveryResponse.timestamp = millis();
+    strncpy(discoveryResponse.message, "Brain Found", sizeof(discoveryResponse.message) - 1);
+    discoveryResponse.message[sizeof(discoveryResponse.message) - 1] = '\0';
+    
+    // 立即发送响应
+    bool result = quickEspNow.send(DEST_ADDR, (uint8_t *)&discoveryResponse, sizeof(discoveryResponse));
+    if (!result) {
+        // Serial.printf("Discovery response sent to Feeder ID: %d\n", feederID);
+        
+        // 更新Hand在线状态
+        if (feederID < TOTAL_FEEDERS) {
+            lastHandResponse[feederID] = millis();
+        }
+    } else {
+        // Serial.printf("Failed to send discovery response to Feeder ID: %d\n", feederID);
+    }
 }

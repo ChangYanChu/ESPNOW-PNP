@@ -12,4 +12,12 @@ void schedulePendingResponse(uint8_t feederID, uint8_t status, const char *messa
 void processPendingResponse();
 void sendSuccessResponse(uint8_t feederID, const char *message);
 void sendErrorResponse(uint8_t feederID, uint8_t errorCode, const char *message);
+
+// 新增的信道发现功能
+bool scanForBrainChannel();
+bool tryChannelDiscovery(uint8_t channel);
+void sendDiscoveryRequest();
+void handleDiscoveryResponse();
+bool waitForDiscoveryResponse(uint32_t timeoutMs);
+
 #endif // BRAIN_ESPNOW_H

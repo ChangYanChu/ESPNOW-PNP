@@ -13,6 +13,7 @@ int getOnlineHandCount();
 bool sendFeederAdvanceCommand(uint8_t feederId, uint8_t feedLength, uint32_t timeoutMs = 0);
 
 void initFeederStatus();
+void handleDiscoveryRequest(uint8_t feederID); // 新增：处理发现请求
 
 //  获取在线手部数量
 int getOnlineHandCount();

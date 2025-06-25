@@ -20,7 +20,7 @@
 #define GCODE_BUFFER_SIZE 128
 
 // 喂料器配置
-#define TOTAL_FEEDERS 50             // 总喂料器数量
+#define TOTAL_FEEDERS NUMBER_OF_FEEDER             // 总喂料器数量
 #define FEEDERS_PER_HAND 1           // 每个手控制的喂料器数量
 
 // 默认喂料器参数

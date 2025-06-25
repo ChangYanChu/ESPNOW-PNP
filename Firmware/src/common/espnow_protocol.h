@@ -14,6 +14,7 @@ typedef enum {
     CMD_RESPONSE = 0x07,             // 响应命令
     CMD_HEARTBEAT = 0x08,            // 心跳包
     CMD_HAND_REGISTER = 0x09,        // Hand注册命令
+    CMD_DISCOVERY = 0x0A,            // 发现Brain命令
 } ESPNowCommandType;
 
 // 状态码枚举

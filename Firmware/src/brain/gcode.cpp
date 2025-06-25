@@ -1,6 +1,8 @@
 #include "gcode.h"
 #include "brain_espnow.h"
 #include "lcd.h"
+#include <WiFi.h>
+#include "brain_tcp.h"
 
 String inputBuffer = ""; // Buffer for incoming G-Code lines
 
@@ -48,6 +50,29 @@ void sendAnswer(uint8_t error, String message)
     }
 
     Serial.println(message);
+    
+    // 如果有TCP客户端连接，也发送给TCP客户端
+    WiFiClient* tcpClient = getCurrentTcpClient();
+    if (tcpClient && tcpClient->connected()) {
+        Serial.println("Sending response to TCP client..."); // 调试信息
+        String fullResponse = "";
+        if (error == 0) {
+            tcpClient->print("ok ");
+            fullResponse = "ok ";
+        } else {
+            tcpClient->print("error ");
+            fullResponse = "error ";
+        }
+        tcpClient->println(message);
+        fullResponse += message;
+        tcpClient->flush(); // 确保数据发送
+        Serial.print("Response sent to TCP client: [");
+        Serial.print(fullResponse);
+        Serial.println("]");
+    } else {
+        Serial.println("No TCP client connected or client disconnected"); // 调试信息
+    }
+
 #if HAS_LCD
     // 添加防抖逻辑，避免短时间内重复更新LCD
     static unsigned long last_lcd_update = 0;
@@ -86,6 +111,29 @@ void sendAnswer(int error, const __FlashStringHelper *message)
     }
 
     Serial.println(msg);
+    
+    // 如果有TCP客户端连接，也发送给TCP客户端
+    WiFiClient* tcpClient = getCurrentTcpClient();
+    if (tcpClient && tcpClient->connected()) {
+        Serial.println("Sending response to TCP client..."); // 调试信息
+        String fullResponse = "";
+        if (error == 0) {
+            tcpClient->print("ok ");
+            fullResponse = "ok ";
+        } else {
+            tcpClient->print("error ");
+            fullResponse = "error ";
+        }
+        tcpClient->println(msg);
+        fullResponse += msg;
+        tcpClient->flush(); // 确保数据发送
+        Serial.print("Response sent to TCP client: [");
+        Serial.print(fullResponse);
+        Serial.println("]");
+    } else {
+        Serial.println("No TCP client connected or client disconnected"); // 调试信息
+    }
+
 #if HAS_LCD
     // 添加防抖逻辑，避免短时间内重复更新LCD
     static unsigned long last_lcd_update = 0;
