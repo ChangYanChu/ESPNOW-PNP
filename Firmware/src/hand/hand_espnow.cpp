@@ -171,6 +171,10 @@ void processReceivedCommand()
         handleHeartbeatCommand();
         break;
 
+    case CMD_SET_FEEDER_ID:
+        handleSetFeederIDCommand(receivedFeedLength); // 使用feedLength字段传递新ID
+        break;
+
     default:
         DEBUG_PRINTF("Unknown command type: 0x%02X\n", receivedCommandType);
         // sendErrorResponse(receivedFeederID, STATUS_INVALID_PARAM, "Unknown command");
@@ -366,4 +370,17 @@ bool waitForDiscoveryResponse(uint32_t timeoutMs)
     }
 
     return false; // 超时
+}
+
+// 处理远程设置Feeder ID命令
+void handleSetFeederIDCommand(uint8_t newFeederID)
+{
+    DEBUG_PRINTF("Received remote ID assignment: %d\n", newFeederID);
+    
+    // 调用feeder_id_manager中的函数进行设置
+    if (setFeederIDRemotely(newFeederID)) {
+        schedulePendingResponse(newFeederID, STATUS_OK, "ID Set");
+    } else {
+        schedulePendingResponse(getCurrentFeederID(), STATUS_ERROR, "ID Set Failed");
+    }
 }

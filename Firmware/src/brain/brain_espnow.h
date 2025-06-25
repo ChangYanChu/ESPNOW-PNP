@@ -15,6 +15,11 @@ bool sendFeederAdvanceCommand(uint8_t feederId, uint8_t feedLength, uint32_t tim
 void initFeederStatus();
 void handleDiscoveryRequest(uint8_t feederID); // 新增：处理发现请求
 
+// 远程配置相关函数
+bool sendSetFeederIDCommand(uint8_t targetMAC[6], uint8_t newFeederID);
+void handleUnassignedHandDiscovery(uint8_t* macAddr);
+void listUnassignedHands(String &response);
+
 //  获取在线手部数量
 int getOnlineHandCount();
 

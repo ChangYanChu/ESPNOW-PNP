@@ -50,6 +50,52 @@ static uint8_t receiver[] = {0x12, 0x34, 0x56, 0x78, 0x90, 0x12};
 // 超时管理变量 - 改为按设备管理
 FeederStatus feederStatusArray[NUMBER_OF_FEEDER];
 
+// 未分配Hand管理（简化版，避免性能占用）
+struct UnassignedHand {
+    uint8_t macAddr[6];
+    uint32_t lastSeen;
+    bool active;
+};
+
+#define MAX_UNASSIGNED_HANDS 10
+UnassignedHand unassignedHands[MAX_UNASSIGNED_HANDS];
+
+// 添加或更新未分配Hand记录
+void addUnassignedHand(uint8_t* macAddr) {
+    // 先查找是否已存在
+    for (int i = 0; i < MAX_UNASSIGNED_HANDS; i++) {
+        if (unassignedHands[i].active && 
+            memcmp(unassignedHands[i].macAddr, macAddr, 6) == 0) {
+            unassignedHands[i].lastSeen = millis();
+            return;
+        }
+    }
+    
+    // 查找空槽位
+    for (int i = 0; i < MAX_UNASSIGNED_HANDS; i++) {
+        if (!unassignedHands[i].active) {
+            memcpy(unassignedHands[i].macAddr, macAddr, 6);
+            unassignedHands[i].lastSeen = millis();
+            unassignedHands[i].active = true;
+            return;
+        }
+    }
+    
+    // 如果没有空槽位，替换最老的记录
+    int oldestIndex = 0;
+    uint32_t oldestTime = unassignedHands[0].lastSeen;
+    for (int i = 1; i < MAX_UNASSIGNED_HANDS; i++) {
+        if (unassignedHands[i].lastSeen < oldestTime) {
+            oldestTime = unassignedHands[i].lastSeen;
+            oldestIndex = i;
+        }
+    }
+    
+    memcpy(unassignedHands[oldestIndex].macAddr, macAddr, 6);
+    unassignedHands[oldestIndex].lastSeen = millis();
+    unassignedHands[oldestIndex].active = true;
+}
+
 void initFeederStatus()
 {
     for (int i = 0; i < NUMBER_OF_FEEDER; i++)
@@ -57,6 +103,13 @@ void initFeederStatus()
         feederStatusArray[i].waitingForResponse = false;
         feederStatusArray[i].commandSentTime = 0;
         feederStatusArray[i].timeoutMs = 5000;
+    }
+    
+    // 初始化未分配Hand列表
+    for (int i = 0; i < MAX_UNASSIGNED_HANDS; i++) {
+        unassignedHands[i].active = false;
+        unassignedHands[i].lastSeen = 0;
+        memset(unassignedHands[i].macAddr, 0, 6);
     }
 }
 
@@ -106,6 +159,13 @@ void dataReceived(uint8_t *address, uint8_t *data, uint8_t len, signed int rssi,
         
         if (packet->commandType == CMD_DISCOVERY)
         {
+            // 检查是否为未分配的Hand（ID=255）
+            if (packet->feederId == 255) {
+                // 未分配的Hand，记录其MAC地址
+                addUnassignedHand(address);
+                Serial.printf("Unassigned Hand discovered: " MACSTR "\n", MAC2STR(address));
+            }
+            
             // 处理发现请求，立即发送响应
             handleDiscoveryRequest(packet->feederId);
         }
@@ -424,5 +484,48 @@ void handleDiscoveryRequest(uint8_t feederID)
         }
     } else {
         // Serial.printf("Failed to send discovery response to Feeder ID: %d\n", feederID);
+    }
+}
+
+// 发送设置Feeder ID命令
+bool sendSetFeederIDCommand(uint8_t targetMAC[6], uint8_t newFeederID) {
+    ESPNowPacket setIDPacket;
+    setIDPacket.commandType = CMD_SET_FEEDER_ID;
+    setIDPacket.feederId = 255; // 广播给未分配的Hand
+    setIDPacket.feedLength = newFeederID; // 使用feedLength字段传递新ID
+    memset(setIDPacket.reserved, 0, sizeof(setIDPacket.reserved));
+    
+    Serial.printf("Sending ID assignment: ID=%d to " MACSTR "\n", 
+                  newFeederID, MAC2STR(targetMAC));
+    
+    // 发送到指定MAC地址
+    bool result = quickEspNow.send(targetMAC, (uint8_t*)&setIDPacket, sizeof(setIDPacket));
+    return !result; // QuickEspNow返回0表示成功
+}
+
+// 列出未分配的Hand
+void listUnassignedHands(String &response) {
+    response = "Unassigned Hands:\n";
+    uint32_t now = millis();
+    int count = 0;
+    
+    for (int i = 0; i < MAX_UNASSIGNED_HANDS; i++) {
+        if (unassignedHands[i].active && 
+            (now - unassignedHands[i].lastSeen) < 60000) { // 1分钟内活跃
+            
+            // 格式化MAC地址
+            char macStr[18];
+            sprintf(macStr, "%02X:%02X:%02X:%02X:%02X:%02X",
+                   unassignedHands[i].macAddr[0], unassignedHands[i].macAddr[1],
+                   unassignedHands[i].macAddr[2], unassignedHands[i].macAddr[3],
+                   unassignedHands[i].macAddr[4], unassignedHands[i].macAddr[5]);
+            
+            response += String(count) + ": " + String(macStr) + "\n";
+            count++;
+        }
+    }
+    
+    if (count == 0) {
+        response += "No unassigned hands found.\n";
     }
 }

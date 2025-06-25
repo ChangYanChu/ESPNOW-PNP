@@ -15,7 +15,7 @@
 // 手部ID配置 (每个ESP01S需要设置不同的ID)
 // 可以通过编译标志设置，例如: -D HAND_ID=0
 #ifndef FEEDER_ID
-#define FEEDER_ID 0 // 默认为0，实际部署时需要修改
+#define FEEDER_ID 255 // 默认为255（未分配状态），支持远程配置
 #endif
 
 // 硬件配置 - ESP01S引脚分配

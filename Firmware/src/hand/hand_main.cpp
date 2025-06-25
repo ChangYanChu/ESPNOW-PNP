@@ -40,6 +40,13 @@ void setup()
     // 初始化Feeder ID管理器
     initFeederID();
 
+    // 检查是否为未分配状态
+    if (getCurrentFeederID() == 255) {
+        DEBUG_PRINTLN("=== UNASSIGNED MODE ===");
+        DEBUG_PRINTLN("Feeder ID not assigned, waiting for remote configuration...");
+        DEBUG_PRINTF("MAC Address: %s\n", WiFi.macAddress().c_str());
+    }
+
     // 初始化ESP-NOW
     espnow_setup();
 

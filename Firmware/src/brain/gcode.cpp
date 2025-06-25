@@ -8,6 +8,14 @@ String inputBuffer = ""; // Buffer for incoming G-Code lines
 
 // Add these lines if not already defined elsewhere:
 #define FEEDER_ENABLED 1
+
+// 外部变量声明，用于访问未分配Hand列表
+struct UnassignedHand {
+    uint8_t macAddr[6];
+    uint32_t lastSeen;
+    bool active;
+};
+extern UnassignedHand unassignedHands[10];
 #define FEEDER_DISABLED 0
 uint8_t feederEnabled = FEEDER_DISABLED;
 
@@ -297,6 +305,52 @@ void processCommand()
         String response;
         getOnlineHandDetails(response);
         sendAnswer(0, response);
+        break;
+    }
+
+    case MCODE_LIST_UNASSIGNED: // M630 - 列出未分配ID的Hand
+    {
+        String response;
+        listUnassignedHands(response);
+        sendAnswer(0, response);
+        break;
+    }
+
+    case MCODE_SET_HAND_ID: // M631 N<hand_index> P<new_feeder_id>
+    {
+        int n_value = parseParameter('N', -1);
+        int p_value = parseParameter('P', -1);
+        
+        if (n_value >= 0 && n_value < 10 && p_value >= 0 && p_value < TOTAL_FEEDERS) { // 简化为直接使用10
+            // 查找对应的未分配Hand
+            uint32_t now = millis();
+            int activeIndex = -1;
+            int currentIndex = 0;
+            
+            for (int i = 0; i < 10; i++) { // 直接使用10，避免宏定义问题
+                if (unassignedHands[i].active && (now - unassignedHands[i].lastSeen) < 60000) {
+                    if (currentIndex == n_value) {
+                        activeIndex = i;
+                        break;
+                    }
+                    currentIndex++;
+                }
+            }
+            
+            if (activeIndex >= 0) {
+                if (sendSetFeederIDCommand(unassignedHands[activeIndex].macAddr, p_value)) {
+                    sendAnswer(0, "ID assignment command sent");
+                    // 从未分配列表中移除
+                    unassignedHands[activeIndex].active = false;
+                } else {
+                    sendAnswer(1, "Failed to send ID assignment command");
+                }
+            } else {
+                sendAnswer(1, "Hand index not found");
+            }
+        } else {
+            sendAnswer(1, "Invalid parameters (N: hand index, P: new feeder ID 0-49)");
+        }
         break;
     }
        
