@@ -1,5 +1,6 @@
 #include "brain_espnow.h"
 #include "brain_config.h"
+#include "brain_web.h"
 #include "gcode.h"
 #include "lcd.h"
 #include "../common/espnow_protocol.h"
@@ -32,7 +33,7 @@ volatile uint32_t currentTimeoutMs = 5000; // 添加动态超时变量
 // Hand在线状态管理（最简单实现）
 #define HAND_OFFLINE_TIMEOUT 30000                     // 30秒无响应视为离线
 #define HEARTBEAT_INTERVAL 10000                       // 10秒发送一次心跳
-static uint32_t lastHandResponse[TOTAL_FEEDERS] = {0}; // 记录每个Hand最后响应时间
+uint32_t lastHandResponse[TOTAL_FEEDERS] = {0}; // 记录每个Hand最后响应时间
 static uint32_t lastHeartbeatTime = 0;                 // 最后心跳时间
 
 static const String msg = "Hello esp-now!";
@@ -143,7 +144,16 @@ void dataReceived(uint8_t *address, uint8_t *data, uint8_t len, signed int rssi,
         // 更新Hand在线状态 - 记录响应时间
         if (response->handId < TOTAL_FEEDERS)
         {
+            // 检查是否是新上线的Hand
+            bool wasOffline = (lastHandResponse[response->handId] == 0 || 
+                             (millis() - lastHandResponse[response->handId] >= HAND_OFFLINE_TIMEOUT));
+            
             lastHandResponse[response->handId] = millis();
+            
+            // 如果是新上线，通知Web界面
+            if (wasOffline) {
+                notifyHandOnline(response->handId);
+            }
         }
 
         // Serial.printf("Brain stored response data, hasNewResponse=true\n");
@@ -220,12 +230,14 @@ void processReceivedResponse()
                     // 喂料完成成功，发送带飞达编号的OK响应
                     String response = "Feed N" + String(feederId) + " completed";
                     sendAnswer(0, response);
+                    notifyCommandCompleted(feederId, true, "completed");
                 }
                 else
                 {
                     // 喂料失败，发送带飞达编号的错误响应
                     String errorResponse = "Feed N" + String(feederId) + " error: " + String((char *)receivedMessage);
                     sendAnswer(1, errorResponse);
+                    notifyCommandCompleted(feederId, false, (char *)receivedMessage);
                 }
             }
             else
@@ -266,6 +278,7 @@ void checkCommandTimeout()
                 // 发送带飞达编号的超时错误响应
                 String timeoutResponse = "Feed N" + String(i) + " timeout";
                 sendAnswer(1, timeoutResponse);
+                notifyCommandCompleted(i, false, "timeout");
             }
         }
     }
@@ -276,11 +289,22 @@ int getOnlineHandCount()
 {
     uint32_t now = millis();
     int onlineCount = 0;
+    static bool lastOnlineStatus[TOTAL_FEEDERS] = {false}; // 记录上次在线状态
 
     for (int i = 0; i < TOTAL_FEEDERS; i++)
     {
-        if (lastHandResponse[i] > 0 && (now - lastHandResponse[i] < HAND_OFFLINE_TIMEOUT))
-        {
+        bool isOnline = (lastHandResponse[i] > 0 && (now - lastHandResponse[i] < HAND_OFFLINE_TIMEOUT));
+        
+        // 检测状态变化，通知Web界面
+        if (isOnline && !lastOnlineStatus[i]) {
+            // 从离线变为在线（已在dataReceived中处理）
+        } else if (!isOnline && lastOnlineStatus[i]) {
+            // 从在线变为离线
+            notifyHandOffline(i);
+        }
+        
+        lastOnlineStatus[i] = isOnline;
+        if (isOnline) {
             onlineCount++;
         }
     }
@@ -424,6 +448,7 @@ bool sendFeederAdvanceCommand(uint8_t feederId, uint8_t feedLength, uint32_t tim
         // ESP-NOW发送成功，开始等待该设备的响应
         feederStatusArray[feederId].waitingForResponse = true;
         feederStatusArray[feederId].commandSentTime = millis();
+        notifyCommandReceived(feederId, feedLength);
         return true;
     }
     else

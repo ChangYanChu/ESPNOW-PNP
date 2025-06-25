@@ -2,6 +2,7 @@
 #define BRAIN_ESPNOW_H
 
 #include <Arduino.h>
+#include "brain_config.h"
 #include "gcode.h"
 void dataReceived(uint8_t *address, uint8_t *data, uint8_t len, signed int rssi, bool broadcast);
 void espnow_setup();
@@ -35,4 +36,14 @@ struct FeederStatus
 };
 
 extern FeederStatus feederStatusArray[NUMBER_OF_FEEDER];
+
+// 外部变量声明，用于Web监控
+extern uint32_t lastHandResponse[TOTAL_FEEDERS];
+
+// Web通知函数声明
+void notifyCommandReceived(uint8_t feederId, uint8_t feedLength);
+void notifyCommandCompleted(uint8_t feederId, bool success, const char* message);
+void notifyHandOnline(uint8_t feederId);
+void notifyHandOffline(uint8_t feederId);
+
 #endif // BRAIN_ESPNOW_H

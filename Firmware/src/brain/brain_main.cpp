@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "brain_config.h"
 #include "brain_espnow.h"
+#include "brain_web.h"
 #include "gcode.h"
 #include "lcd.h"
 #include "brain_tcp.h"
@@ -32,6 +33,7 @@ void setup()
 #endif
 
     tcp_setup(); // 初始化TCP服务器
+    web_setup(); // 初始化Web服务器
 
     // 等待系统稳定
     delay(200);
