@@ -5,6 +5,8 @@
 #include "lcd.h"
 #include "../common/espnow_protocol.h"
 #include <Arduino.h>
+#include <Preferences.h>
+#include <ArduinoJson.h>
 #if defined ESP32
 #include <WiFi.h>
 #include <esp_wifi.h>
@@ -50,6 +52,10 @@ static uint8_t receiver[] = {0x12, 0x34, 0x56, 0x78, 0x90, 0x12};
 
 // 超时管理变量 - 改为按设备管理
 FeederStatus feederStatusArray[NUMBER_OF_FEEDER];
+
+// 全局统计变量
+uint32_t totalSessionFeeds = 0;    // 本次开机总送料次数
+uint32_t totalWorkCount = 0;       // 总作业次数
 
 // 未分配Hand管理（简化版，避免性能占用）
 struct UnassignedHand {
@@ -104,6 +110,13 @@ void initFeederStatus()
         feederStatusArray[i].waitingForResponse = false;
         feederStatusArray[i].commandSentTime = 0;
         feederStatusArray[i].timeoutMs = 5000;
+        // 初始化新增字段
+        feederStatusArray[i].totalFeedCount = 0;
+        feederStatusArray[i].sessionFeedCount = 0;
+        feederStatusArray[i].totalPartCount = 0;
+        feederStatusArray[i].remainingPartCount = 0;
+        snprintf(feederStatusArray[i].componentName, sizeof(feederStatusArray[i].componentName), "N%d", i);
+        strcpy(feederStatusArray[i].packageType, "Unknown");
     }
     
     // 初始化未分配Hand列表
@@ -112,6 +125,9 @@ void initFeederStatus()
         unassignedHands[i].lastSeen = 0;
         memset(unassignedHands[i].macAddr, 0, 6);
     }
+    
+    // 加载配置
+    loadFeederConfig();
 }
 
 void dataReceived(uint8_t *address, uint8_t *data, uint8_t len, signed int rssi, bool broadcast)
@@ -230,6 +246,7 @@ void processReceivedResponse()
                     // 喂料完成成功，发送带飞达编号的OK响应
                     String response = "Feed N" + String(feederId) + " completed";
                     sendAnswer(0, response);
+                    updateFeederStats(feederId, true);  // 更新统计
                     notifyCommandCompleted(feederId, true, "completed");
                 }
                 else
@@ -237,6 +254,7 @@ void processReceivedResponse()
                     // 喂料失败，发送带飞达编号的错误响应
                     String errorResponse = "Feed N" + String(feederId) + " error: " + String((char *)receivedMessage);
                     sendAnswer(1, errorResponse);
+                    updateFeederStats(feederId, false); // 更新统计
                     notifyCommandCompleted(feederId, false, (char *)receivedMessage);
                 }
             }
@@ -552,5 +570,123 @@ void listUnassignedHands(String &response) {
     
     if (count == 0) {
         response += "No unassigned hands found.\n";
+    }
+}
+
+// =============================================================================
+// 配置管理函数（使用Preferences）
+// =============================================================================
+
+// 加载Feeder配置
+void loadFeederConfig() {
+    Preferences prefs;
+    if (!prefs.begin("feeder_cfg", true)) { // 只读模式
+        Serial.println("Failed to open Preferences, using defaults");
+        return;
+    }
+    
+    // 加载全局统计
+    totalWorkCount = prefs.getULong("totalWork", 0);
+    
+    // 加载每个Feeder配置（压缩存储）
+    for (int i = 0; i < NUMBER_OF_FEEDER; i++) {
+        char key[16];
+        
+        // 加载基本统计数据
+        snprintf(key, sizeof(key), "feed_%d", i);
+        feederStatusArray[i].totalFeedCount = prefs.getULong(key, 0);
+        
+        snprintf(key, sizeof(key), "total_%d", i);
+        feederStatusArray[i].totalPartCount = prefs.getUShort(key, 0);
+        
+        snprintf(key, sizeof(key), "remain_%d", i);
+        feederStatusArray[i].remainingPartCount = prefs.getUShort(key, 0);
+        
+        // 加载字符串数据（仅加载有意义的数据）
+        if (feederStatusArray[i].totalFeedCount > 0 || feederStatusArray[i].totalPartCount > 0) {
+            snprintf(key, sizeof(key), "name_%d", i);
+            String name = prefs.getString(key, "");
+            if (name.length() > 0) {
+                strncpy(feederStatusArray[i].componentName, name.c_str(), sizeof(feederStatusArray[i].componentName) - 1);
+            }
+            
+            snprintf(key, sizeof(key), "pkg_%d", i);
+            String pkg = prefs.getString(key, "");
+            if (pkg.length() > 0) {
+                strncpy(feederStatusArray[i].packageType, pkg.c_str(), sizeof(feederStatusArray[i].packageType) - 1);
+            }
+        }
+    }
+    
+    prefs.end();
+    Serial.println("Feeder config loaded from Preferences");
+}
+
+// 保存Feeder配置（轻量级实现）
+void saveFeederConfig() {
+    static uint32_t lastSaveTime = 0;
+    uint32_t now = millis();
+    
+    // 限制保存频率，避免频繁写入
+    if (now - lastSaveTime < 10000) return; // 10秒最多保存一次
+    lastSaveTime = now;
+    
+    Preferences prefs;
+    if (!prefs.begin("feeder_cfg", false)) { // 读写模式
+        Serial.println("Failed to open Preferences for saving");
+        return;
+    }
+    
+    // 保存全局统计
+    prefs.putULong("totalWork", totalWorkCount);
+    
+    // 保存每个Feeder配置（只保存有意义的数据）
+    for (int i = 0; i < NUMBER_OF_FEEDER; i++) {
+        if (feederStatusArray[i].totalFeedCount > 0 || 
+            feederStatusArray[i].totalPartCount > 0 ||
+            strlen(feederStatusArray[i].componentName) > 0) {
+            
+            char key[16];
+            
+            snprintf(key, sizeof(key), "feed_%d", i);
+            prefs.putULong(key, feederStatusArray[i].totalFeedCount);
+            
+            snprintf(key, sizeof(key), "total_%d", i);
+            prefs.putUShort(key, feederStatusArray[i].totalPartCount);
+            
+            snprintf(key, sizeof(key), "remain_%d", i);
+            prefs.putUShort(key, feederStatusArray[i].remainingPartCount);
+            
+            snprintf(key, sizeof(key), "name_%d", i);
+            prefs.putString(key, String(feederStatusArray[i].componentName));
+            
+            snprintf(key, sizeof(key), "pkg_%d", i);
+            prefs.putString(key, String(feederStatusArray[i].packageType));
+        }
+    }
+    
+    prefs.end();
+    Serial.println("Feeder config saved to Preferences");
+}
+
+// 更新Feeder统计信息
+void updateFeederStats(uint8_t feederId, bool success) {
+    if (feederId >= NUMBER_OF_FEEDER) return;
+    
+    if (success) {
+        feederStatusArray[feederId].totalFeedCount++;
+        feederStatusArray[feederId].sessionFeedCount++;
+        totalSessionFeeds++;
+        totalWorkCount++;
+        
+        // 减少剩余零件数量
+        if (feederStatusArray[feederId].remainingPartCount > 0) {
+            feederStatusArray[feederId].remainingPartCount--;
+        }
+        
+        // 每10次操作保存一次配置
+        if (totalWorkCount % 10 == 0) {
+            saveFeederConfig();
+        }
     }
 }

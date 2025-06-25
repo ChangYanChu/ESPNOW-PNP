@@ -33,12 +33,28 @@ struct FeederStatus
     bool waitingForResponse;
     uint32_t commandSentTime;
     uint32_t timeoutMs;
+    // 新增统计字段
+    uint32_t totalFeedCount;        // 总送料次数
+    uint16_t sessionFeedCount;      // 本次开机送料次数
+    uint16_t totalPartCount;        // 总零件数量
+    uint16_t remainingPartCount;    // 剩余零件数量
+    char componentName[16];         // 元件名称（压缩长度）
+    char packageType[8];            // 封装类型（压缩长度）
 };
 
 extern FeederStatus feederStatusArray[NUMBER_OF_FEEDER];
 
+// 全局统计变量
+extern uint32_t totalSessionFeeds;
+extern uint32_t totalWorkCount;
+
 // 外部变量声明，用于Web监控
 extern uint32_t lastHandResponse[TOTAL_FEEDERS];
+
+// 配置管理函数声明
+void loadFeederConfig();
+void saveFeederConfig();
+void updateFeederStats(uint8_t feederId, bool success);
 
 // Web通知函数声明
 void notifyCommandReceived(uint8_t feederId, uint8_t feedLength);
