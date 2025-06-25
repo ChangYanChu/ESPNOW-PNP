@@ -111,3 +111,24 @@ void printHelp() {
     DEBUG_PRINTLN("HELP or ?    - Show this help");
     DEBUG_PRINTLN("=====================================\n");
 }
+
+// 检查当前ID是否为未分配状态
+bool isFeederIDUnassigned() {
+    return currentFeederID == 255;
+}
+
+// 远程设置Feeder ID（由ESP-NOW命令调用）
+bool setFeederIDRemotely(uint8_t newID) {
+    if (newID >= TOTAL_FEEDERS) {
+        DEBUG_PRINTF("Remote set: Invalid Feeder ID: %d\n", newID);
+        return false;
+    }
+    
+    bool success = saveFeederID(newID);
+    if (success) {
+        DEBUG_PRINTF("Remote set: Feeder ID set to %d, restarting...\n", newID);
+        delay(100); // 给调试输出一点时间
+        ESP.restart(); // 重启以应用新配置
+    }
+    return success;
+}

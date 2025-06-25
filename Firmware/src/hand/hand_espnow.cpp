@@ -27,6 +27,11 @@ volatile uint8_t pendingResponseFeederID = 0;
 volatile uint8_t pendingResponseStatus = 0;
 volatile char pendingResponseMessage[16] = {0};
 
+// 信道发现相关全局变量
+volatile bool discoveryResponseReceived = false;
+volatile uint8_t discoveredChannel = 0;
+uint8_t currentScanChannel = 1;
+
 static const String msg = "Hello esp-now!";
 
 #define USE_BROADCAST 1 // Set this to 1 to use broadcast communication
@@ -56,13 +61,22 @@ void dataReceived(uint8_t *address, uint8_t *data, uint8_t len, signed int rssi,
         DEBUG_PRINTF("Hand ID: %d\n", response->handId);
         DEBUG_PRINTF("Status: 0x%02X\n", response->status);
         DEBUG_PRINTF("Message: %.16s\n", response->message);
+
+        // 检查是否为发现响应
+        if (response->commandType == CMD_RESPONSE &&
+            strcmp(response->message, "Brain Found") == 0)
+        {
+            discoveryResponseReceived = true;
+            discoveredChannel = currentScanChannel;
+            DEBUG_PRINTF("Discovery response received on channel %d\n", currentScanChannel);
+        }
     }
     else if (len == sizeof(ESPNowPacket))
     {
         // 如果是命令包，存储到全局变量中
         ESPNowPacket *packet = (ESPNowPacket *)data;
         DEBUG_PRINTF("Received command: Type=0x%02X, FeederID=%d, Length=%d\n",
-                      packet->commandType, packet->feederId, packet->feedLength);
+                     packet->commandType, packet->feederId, packet->feedLength);
 
         // 将接收到的命令数据存储到全局变量
         receivedCommandType = packet->commandType;
@@ -82,14 +96,26 @@ void espnow_setup()
     // 设置为Station模式但不连接WiFi，仅用于ESP-NOW通信
     WiFi.mode(WIFI_MODE_STA);
     WiFi.disconnect();
-    
+
     DEBUG_PRINTF("MAC address: %s\n", WiFi.macAddress().c_str());
-   DEBUG_PRINTLN("ESP-NOW initializing without WiFi connection...");
-    
+    DEBUG_PRINTLN("ESP-NOW initializing without WiFi connection...");
+
     quickEspNow.onDataRcvd(dataReceived);
-    quickEspNow.begin(6); // 使用固定频道6启动ESP-NOW，与Brain端保持一致
-    
-   DEBUG_PRINTLN("ESP-NOW initialized on channel 6");
+
+    // 自动扫描并找到Brain所在的信道
+    DEBUG_PRINTLN("Starting channel discovery...");
+    if (scanForBrainChannel())
+    {
+        DEBUG_PRINTF("Brain found on channel %d\n", discoveredChannel);
+        DEBUG_PRINTLN("ESP-NOW initialized successfully");
+    }
+    else
+    {
+        DEBUG_PRINTLN("Failed to find Brain, using default channel 6");
+        quickEspNow.begin(6); // 失败时使用默认频道6
+    }
+
+    DEBUG_PRINTLN("ESP-NOW initialized on channel 6");
 }
 
 void esp_update()
@@ -128,12 +154,12 @@ void processReceivedCommand()
     if (receivedFeederID != myFeederID && receivedFeederID != 0xFF)
     { // 0xFF为广播ID
         DEBUG_PRINTF("Command not for this feeder (ID:%d, received:%d)\n",
-                      myFeederID, receivedFeederID);
+                     myFeederID, receivedFeederID);
         return;
     }
 
     DEBUG_PRINTF("Processing command: Type=0x%02X, FeederID=%d, Length=%d\n",
-                  receivedCommandType, receivedFeederID, receivedFeedLength);
+                 receivedCommandType, receivedFeederID, receivedFeedLength);
 
     switch (receivedCommandType)
     {
@@ -143,6 +169,10 @@ void processReceivedCommand()
 
     case CMD_HEARTBEAT:
         handleHeartbeatCommand();
+        break;
+
+    case CMD_SET_FEEDER_ID:
+        handleSetFeederIDCommand(receivedFeedLength); // 使用feedLength字段传递新ID
         break;
 
     default:
@@ -160,9 +190,6 @@ void handleFeederAdvanceCommand(uint8_t feederID, uint8_t feedLength)
     // 这里添加实际的喂料逻辑
     // 例如：控制步进电机，检查传感器等
     feedTapeAction(feedLength);
-    
-    // 模拟处理时间
-    delay(100);
 
     // 不直接发送响应，而是设置待发送的响应状态
     schedulePendingResponse(feederID, STATUS_OK, "Feed OK");
@@ -171,8 +198,8 @@ void handleFeederAdvanceCommand(uint8_t feederID, uint8_t feedLength)
 // 处理心跳命令
 void handleHeartbeatCommand()
 {
-   DEBUG_PRINTLN("Received heartbeat, sending response");
-    
+    DEBUG_PRINTLN("Received heartbeat, sending response");
+
     uint8_t myFeederID = getCurrentFeederID();
     schedulePendingResponse(myFeederID, STATUS_OK, "Online");
 }
@@ -182,12 +209,12 @@ void schedulePendingResponse(uint8_t feederID, uint8_t status, const char *messa
 {
     pendingResponseFeederID = feederID;
     pendingResponseStatus = status;
-    strncpy((char*)pendingResponseMessage, message, sizeof(pendingResponseMessage) - 1);
+    strncpy((char *)pendingResponseMessage, message, sizeof(pendingResponseMessage) - 1);
     pendingResponseMessage[sizeof(pendingResponseMessage) - 1] = '\0';
     hasPendingResponse = true;
-    
-    DEBUG_PRINTF("Scheduled response: FeederID=%d, Status=0x%02X, Message=%s\n", 
-                  feederID, status, message);
+
+    DEBUG_PRINTF("Scheduled response: FeederID=%d, Status=0x%02X, Message=%s\n",
+                 feederID, status, message);
 }
 
 // 处理待发送的响应（在主循环中调用）
@@ -202,16 +229,16 @@ void processPendingResponse()
     hasPendingResponse = false;
 
     DEBUG_PRINTF("Processing pending response: FeederID=%d, Status=0x%02X, Message=%s\n",
-                  pendingResponseFeederID, pendingResponseStatus, (char*)pendingResponseMessage);
+                 pendingResponseFeederID, pendingResponseStatus, (char *)pendingResponseMessage);
 
     // 根据状态发送相应的响应
     if (pendingResponseStatus == STATUS_OK)
     {
-        sendSuccessResponse(pendingResponseFeederID, (char*)pendingResponseMessage);
+        sendSuccessResponse(pendingResponseFeederID, (char *)pendingResponseMessage);
     }
     else
     {
-        sendErrorResponse(pendingResponseFeederID, pendingResponseStatus, (char*)pendingResponseMessage);
+        sendErrorResponse(pendingResponseFeederID, pendingResponseStatus, (char *)pendingResponseMessage);
     }
 }
 
@@ -265,5 +292,95 @@ void sendErrorResponse(uint8_t feederID, uint8_t errorCode, const char *message)
     else
     {
         DEBUG_PRINTF("Failed to send error response for feeder %d\n", feederID);
+    }
+}
+
+// =============================================================================
+// 信道发现功能实现
+// =============================================================================
+
+// 扫描所有信道寻找Brain
+bool scanForBrainChannel()
+{
+    // 扫描信道1-13（2.4GHz WiFi信道）
+    for (uint8_t channel = 1; channel <= 13; channel++)
+    {
+        DEBUG_PRINTF("Scanning channel %d...\n", channel);
+
+        if (tryChannelDiscovery(channel))
+        {
+            discoveredChannel = channel;
+            return true;
+        }
+
+        // 每个信道间隔一点时间，避免射频冲突
+        delay(100);
+    }
+
+    return false; // 未找到Brain
+}
+
+// 在指定信道上尝试发现Brain
+bool tryChannelDiscovery(uint8_t channel)
+{
+    currentScanChannel = channel;
+    discoveryResponseReceived = false;
+
+    // 在指定信道上初始化ESP-NOW
+    quickEspNow.begin(channel);
+    delay(50); // 等待ESP-NOW初始化完成
+
+    // 发送发现请求
+    sendDiscoveryRequest();
+
+    // 等待响应
+    return waitForDiscoveryResponse(500); // 500ms超时
+}
+
+// 发送发现请求
+void sendDiscoveryRequest()
+{
+    ESPNowPacket discoveryPacket;
+    discoveryPacket.commandType = CMD_DISCOVERY;
+    discoveryPacket.feederId = getCurrentFeederID();
+    discoveryPacket.feedLength = 0;
+    memset(discoveryPacket.reserved, 0, sizeof(discoveryPacket.reserved));
+
+    DEBUG_PRINTF("Sending discovery request on channel %d\n", currentScanChannel);
+
+    bool result = quickEspNow.send(DEST_ADDR, (uint8_t *)&discoveryPacket, sizeof(discoveryPacket));
+    if (result)
+    {
+        DEBUG_PRINTF("Failed to send discovery request on channel %d\n", currentScanChannel);
+    }
+}
+
+// 等待发现响应
+bool waitForDiscoveryResponse(uint32_t timeoutMs)
+{
+    uint32_t startTime = millis();
+
+    while (millis() - startTime < timeoutMs)
+    {
+        if (discoveryResponseReceived)
+        {
+            return true;
+        }
+        delay(10); // 短暂延迟，让系统处理其他任务
+    }
+
+    return false; // 超时
+}
+
+// 处理远程设置Feeder ID命令
+void handleSetFeederIDCommand(uint8_t newFeederID)
+{
+    DEBUG_PRINTF("Received remote ID assignment: %d\n", newFeederID);
+    
+    // 调用feeder_id_manager中的函数进行设置
+    if (setFeederIDRemotely(newFeederID)) {
+        schedulePendingResponse(newFeederID, STATUS_OK, "ID Set");
+    } else {
+        schedulePendingResponse(getCurrentFeederID(), STATUS_ERROR, "ID Set Failed");
     }
 }

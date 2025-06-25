@@ -31,7 +31,7 @@ void feedTapeAction(uint8_t feedLength)
     {
         DEBUG_PRINTF("Action %d/%d\n", i + 1, actionCount);
 
-        // 移动到0度位置
+        // 移动到90度位置
         myservo.write(90);
         unsigned long startTime = millis();
         while (millis() - startTime < 300) {
@@ -39,7 +39,7 @@ void feedTapeAction(uint8_t feedLength)
             delay(1);
         }
 
-        // 移动到80度位置
+        // 移动到0度位置
         myservo.write(0);
         startTime = millis();
         while (millis() - startTime < 300) {
@@ -47,7 +47,7 @@ void feedTapeAction(uint8_t feedLength)
             delay(1);
         }
 
-        // 回到0度位置
+        // 回到90度位置
         myservo.write(90);
         startTime = millis();
         while (millis() - startTime < 300) {

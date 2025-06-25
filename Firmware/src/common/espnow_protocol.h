@@ -14,6 +14,9 @@ typedef enum {
     CMD_RESPONSE = 0x07,             // 响应命令
     CMD_HEARTBEAT = 0x08,            // 心跳包
     CMD_HAND_REGISTER = 0x09,        // Hand注册命令
+    CMD_DISCOVERY = 0x0A,            // 发现Brain命令
+    CMD_SET_FEEDER_ID = 0x0B,        // 设置喂料器ID命令
+    CMD_LIST_UNASSIGNED = 0x0C,      // 列出未分配ID的Hand
 } ESPNowCommandType;
 
 // 状态码枚举
@@ -47,4 +50,5 @@ struct ESPNowResponse {
 
 // 系统配置
 #define MAX_HANDS 50                 // 最大手部数量 (与TOTAL_FEEDERS保持一致)
+#define UNASSIGNED_FEEDER_ID 255     // 未分配的喂料器ID标识
 #endif // ESPNOW_PROTOCOL_H

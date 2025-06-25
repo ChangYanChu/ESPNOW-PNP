@@ -18,4 +18,8 @@ void processSerialCommand();
 // 打印帮助信息
 void printHelp();
 
+// 远程配置相关函数
+bool isFeederIDUnassigned();
+bool setFeederIDRemotely(uint8_t newID);
+
 #endif

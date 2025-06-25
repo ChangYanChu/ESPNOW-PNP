@@ -1,8 +1,10 @@
 #include <Arduino.h>
 #include "brain_config.h"
 #include "brain_espnow.h"
+#include "brain_web.h"
 #include "gcode.h"
 #include "lcd.h"
+#include "brain_tcp.h"
 
 void setup()
 {
@@ -30,6 +32,9 @@ void setup()
     lcd_update_system_status(SYSTEM_RUNNING);
 #endif
 
+    tcp_setup(); // 初始化TCP服务器
+    web_setup(); // 初始化Web服务器
+
     // 等待系统稳定
     delay(200);
 }
@@ -45,7 +50,7 @@ void loop()
     listenToSerialStream();
 
     // 处理TCP通信
-    // tcp_loop();
+    tcp_loop();
 
     // 处理接收到的ESP-NOW响应
     processReceivedResponse();
@@ -66,6 +71,7 @@ void loop()
         last_hand_count_update = millis();
     }
 #endif
+
     // 添加一个小延迟以避免过度占用CPU
     delay(1);
 }
