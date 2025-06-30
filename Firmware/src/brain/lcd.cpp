@@ -66,26 +66,26 @@ uint8_t heart_char[8] = {
     0b00000,
     0b00000};
 
-// TCP连接图标 - 实心圆点
+// TCP连接图标 - 字母T (连接状态)
 uint8_t tcp_connected_char[8] = {
     0b00000,
-    0b00000,
-    0b01110,
     0b11111,
-    0b11111,
-    0b01110,
-    0b00000,
+    0b00100,
+    0b00100,
+    0b00100,
+    0b00100,
+    0b00100,
     0b00000};
 
-// TCP断开图标 - 空心圆点
+// TCP断开图标 - 字母T带下划线 (断开状态)
 uint8_t tcp_disconnected_char[8] = {
     0b00000,
-    0b00000,
-    0b01110,
-    0b10001,
-    0b10001,
-    0b01110,
-    0b00000,
+    0b11111,
+    0b00100,
+    0b00100,
+    0b00100,
+    0b00100,
+    0b11111,
     0b00000};
 
 void lcd_setup()
@@ -208,11 +208,11 @@ void lcd_show_status(int online, int total, unsigned long uptime)
     lcd.setCursor(13, 0);
     if (tcp_connected)
     {
-        lcd.write(4); // TCP连接图标 - 实心圆点
+        lcd.write(4); // TCP连接图标 - 字母T
     }
     else
     {
-        lcd.write(5); // TCP断开图标 - 空心圆点
+        lcd.write(5); // TCP断开图标 - 字母T带下划线
     }
 
     // 心跳动画（在最后一个位置）- 独立更新
@@ -502,13 +502,13 @@ void lcd_update_tcp_status(bool connected)
         lcd.setCursor(13, 0); // TCP状态指示器位置
         if (connected)
         {
-            lcd.write(4); // TCP连接图标 - 实心圆点
-            Serial.println("LCD: Displaying solid circle for TCP connected");
+            lcd.write(4); // TCP连接图标 - 字母T
+            Serial.println("LCD: Displaying 'T' for TCP connected");
         }
         else
         {
-            lcd.write(5); // TCP断开图标 - 空心圆点
-            Serial.println("LCD: Displaying hollow circle for TCP disconnected");
+            lcd.write(5); // TCP断开图标 - 字母T带下划线
+            Serial.println("LCD: Displaying 'T_' for TCP disconnected");
         }
     }
 }
