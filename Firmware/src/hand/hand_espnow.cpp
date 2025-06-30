@@ -27,11 +27,6 @@ volatile uint8_t pendingResponseFeederID = 0;
 volatile uint8_t pendingResponseStatus = 0;
 volatile char pendingResponseMessage[16] = {0};
 
-// 信道发现相关全局变量
-volatile bool discoveryResponseReceived = false;
-volatile uint8_t discoveredChannel = 0;
-uint8_t currentScanChannel = 1;
-
 static const String msg = "Hello esp-now!";
 
 #define USE_BROADCAST 1 // Set this to 1 to use broadcast communication
@@ -62,14 +57,8 @@ void dataReceived(uint8_t *address, uint8_t *data, uint8_t len, signed int rssi,
         DEBUG_PRINTF("Status: 0x%02X\n", response->status);
         DEBUG_PRINTF("Message: %.16s\n", response->message);
 
-        // 检查是否为发现响应
-        if (response->commandType == CMD_RESPONSE &&
-            strcmp(response->message, "Brain Found") == 0)
-        {
-            discoveryResponseReceived = true;
-            discoveredChannel = currentScanChannel;
-            DEBUG_PRINTF("Discovery response received on channel %d\n", currentScanChannel);
-        }
+        // 这里可以处理其他类型的响应，目前暂时保留
+        (void)response; // 避免未使用变量警告
     }
     else if (len == sizeof(ESPNowPacket))
     {
@@ -93,29 +82,38 @@ void dataReceived(uint8_t *address, uint8_t *data, uint8_t len, signed int rssi,
 
 void espnow_setup()
 {
-    // 设置为Station模式但不连接WiFi，仅用于ESP-NOW通信
+    // 连接WiFi以获得正确的信道配置
     WiFi.mode(WIFI_MODE_STA);
-    WiFi.disconnect();
-
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    
+    DEBUG_PRINTLN("Connecting to WiFi...");
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        delay(500);
+        DEBUG_PRINT(".");
+    }
+    
+#if WIFI_POWER_MAX
+    // 设置WiFi功率到最大（兼容ESP32和ESP8266）
+#if defined ESP32
+    WiFi.setTxPower(WIFI_POWER_19_5dBm);
+#elif defined ESP8266
+    WiFi.setOutputPower(20.5); // ESP8266使用setOutputPower，单位dBm
+#endif
+    DEBUG_PRINTLN("WiFi power set to maximum");
+#endif
+    
+    DEBUG_PRINTF("Connected to %s in channel %d\n", WiFi.SSID().c_str(), WiFi.channel());
+    DEBUG_PRINTF("IP address: %s\n", WiFi.localIP().toString().c_str());
     DEBUG_PRINTF("MAC address: %s\n", WiFi.macAddress().c_str());
-    DEBUG_PRINTLN("ESP-NOW initializing without WiFi connection...");
+    DEBUG_PRINTLN("ESP-NOW initializing with WiFi connection...");
 
     quickEspNow.onDataRcvd(dataReceived);
 
-    // 自动扫描并找到Brain所在的信道
-    DEBUG_PRINTLN("Starting channel discovery...");
-    if (scanForBrainChannel())
-    {
-        DEBUG_PRINTF("Brain found on channel %d\n", discoveredChannel);
-        DEBUG_PRINTLN("ESP-NOW initialized successfully");
-    }
-    else
-    {
-        DEBUG_PRINTLN("Failed to find Brain, using default channel 6");
-        quickEspNow.begin(6); // 失败时使用默认频道6
-    }
-
-    DEBUG_PRINTLN("ESP-NOW initialized on channel 6");
+    // 使用与WiFi相同的信道初始化ESP-NOW
+    int wifiChannel = WiFi.channel();
+    quickEspNow.begin(wifiChannel);
+    DEBUG_PRINTF("ESP-NOW initialized on channel %d\n", wifiChannel);
 }
 
 void esp_update()
@@ -293,83 +291,6 @@ void sendErrorResponse(uint8_t feederID, uint8_t errorCode, const char *message)
     {
         DEBUG_PRINTF("Failed to send error response for feeder %d\n", feederID);
     }
-}
-
-// =============================================================================
-// 信道发现功能实现
-// =============================================================================
-
-// 扫描所有信道寻找Brain
-bool scanForBrainChannel()
-{
-    // 扫描信道1-13（2.4GHz WiFi信道）
-    for (uint8_t channel = 1; channel <= 13; channel++)
-    {
-        DEBUG_PRINTF("Scanning channel %d...\n", channel);
-
-        if (tryChannelDiscovery(channel))
-        {
-            discoveredChannel = channel;
-            return true;
-        }
-
-        // 每个信道间隔一点时间，避免射频冲突
-        delay(100);
-    }
-
-    return false; // 未找到Brain
-}
-
-// 在指定信道上尝试发现Brain
-bool tryChannelDiscovery(uint8_t channel)
-{
-    currentScanChannel = channel;
-    discoveryResponseReceived = false;
-
-    // 在指定信道上初始化ESP-NOW
-    quickEspNow.begin(channel);
-    delay(50); // 等待ESP-NOW初始化完成
-
-    // 发送发现请求
-    sendDiscoveryRequest();
-
-    // 等待响应
-    return waitForDiscoveryResponse(500); // 500ms超时
-}
-
-// 发送发现请求
-void sendDiscoveryRequest()
-{
-    ESPNowPacket discoveryPacket;
-    discoveryPacket.commandType = CMD_DISCOVERY;
-    discoveryPacket.feederId = getCurrentFeederID();
-    discoveryPacket.feedLength = 0;
-    memset(discoveryPacket.reserved, 0, sizeof(discoveryPacket.reserved));
-
-    DEBUG_PRINTF("Sending discovery request on channel %d\n", currentScanChannel);
-
-    bool result = quickEspNow.send(DEST_ADDR, (uint8_t *)&discoveryPacket, sizeof(discoveryPacket));
-    if (result)
-    {
-        DEBUG_PRINTF("Failed to send discovery request on channel %d\n", currentScanChannel);
-    }
-}
-
-// 等待发现响应
-bool waitForDiscoveryResponse(uint32_t timeoutMs)
-{
-    uint32_t startTime = millis();
-
-    while (millis() - startTime < timeoutMs)
-    {
-        if (discoveryResponseReceived)
-        {
-            return true;
-        }
-        delay(10); // 短暂延迟，让系统处理其他任务
-    }
-
-    return false; // 超时
 }
 
 // 处理远程设置Feeder ID命令

@@ -171,30 +171,26 @@ void dataReceived(uint8_t *address, uint8_t *data, uint8_t len, signed int rssi,
                 notifyHandOnline(response->handId);
             }
         }
+        else if (response->handId == 255)
+        {
+            // 处理未分配设备的心跳响应
+            addUnassignedHand(address);
+            Serial.printf("Unassigned Hand heartbeat: " MACSTR "\n", MAC2STR(address));
+        }
 
         // Serial.printf("Brain stored response data, hasNewResponse=true\n");
     }
     else if (len == sizeof(ESPNowPacket))
     {
-        // 处理来自Hand的命令包（如发现请求）
+        // 处理来自Hand的命令包
         ESPNowPacket *packet = (ESPNowPacket *)data;
         
         // Serial.printf("Brain received ESPNowPacket:\n");
         // Serial.printf("  Command Type: 0x%02X\n", packet->commandType);
         // Serial.printf("  Feeder ID: %d\n", packet->feederId);
         
-        if (packet->commandType == CMD_DISCOVERY)
-        {
-            // 检查是否为未分配的Hand（ID=255）
-            if (packet->feederId == 255) {
-                // 未分配的Hand，记录其MAC地址
-                addUnassignedHand(address);
-                Serial.printf("Unassigned Hand discovered: " MACSTR "\n", MAC2STR(address));
-            }
-            
-            // 处理发现请求，立即发送响应
-            handleDiscoveryRequest(packet->feederId);
-        }
+        // 这里可以处理其他类型的数据包，如状态查询等
+        // 目前暂时保留为扩展预留
     }
     else
     {
@@ -372,8 +368,12 @@ void espnow_setup()
     }
     
 #if WIFI_POWER_MAX
-    // 设置WiFi功率到最大 (ESP32: 20.5dBm, ESP8266: 20.5dBm)
+    // 设置WiFi功率到最大（兼容ESP32和ESP8266）
+#if defined ESP32
     WiFi.setTxPower(WIFI_POWER_19_5dBm); // ESP32最大功率
+#elif defined ESP8266
+    WiFi.setOutputPower(20.5); // ESP8266使用setOutputPower，单位dBm
+#endif
     Serial.println("WiFi power set to maximum");
 #endif
     
@@ -506,35 +506,6 @@ void getOnlineHandDetails(String &response)
     }
 
     response += " (Total: " + String(onlineCount) + ")";
-}
-
-// 处理来自Hand的发现请求
-void handleDiscoveryRequest(uint8_t feederID)
-{
-    // Serial.printf("Received discovery request from Feeder ID: %d\n", feederID);
-    
-    // 创建发现响应
-    ESPNowResponse discoveryResponse;
-    discoveryResponse.handId = feederID;
-    discoveryResponse.commandType = CMD_RESPONSE;
-    discoveryResponse.status = STATUS_OK;
-    discoveryResponse.sequence = 0;
-    discoveryResponse.timestamp = millis();
-    strncpy(discoveryResponse.message, "Brain Found", sizeof(discoveryResponse.message) - 1);
-    discoveryResponse.message[sizeof(discoveryResponse.message) - 1] = '\0';
-    
-    // 立即发送响应
-    bool result = quickEspNow.send(DEST_ADDR, (uint8_t *)&discoveryResponse, sizeof(discoveryResponse));
-    if (!result) {
-        // Serial.printf("Discovery response sent to Feeder ID: %d\n", feederID);
-        
-        // 更新Hand在线状态
-        if (feederID < TOTAL_FEEDERS) {
-            lastHandResponse[feederID] = millis();
-        }
-    } else {
-        // Serial.printf("Failed to send discovery response to Feeder ID: %d\n", feederID);
-    }
 }
 
 // 发送设置Feeder ID命令

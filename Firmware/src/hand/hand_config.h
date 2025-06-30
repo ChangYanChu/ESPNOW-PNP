@@ -30,6 +30,12 @@
 // EEPROM配置
 #define EEPROM_SIZE 512  // EEPROM大小
 #define FEEDER_ID_ADDR 0 // Feeder ID存储地址
+
+// WiFi配置 - 与Brain端保持一致
+#define WIFI_SSID "HONOR"
+#define WIFI_PASSWORD "chu107610."
+#define WIFI_POWER_MAX true  // 设置WiFi功率到最大
+
 #endif
 
 #define BUTTON_PIN 3  // GPIO3 (RXD) 连接按钮
