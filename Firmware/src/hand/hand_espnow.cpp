@@ -82,38 +82,24 @@ void dataReceived(uint8_t *address, uint8_t *data, uint8_t len, signed int rssi,
 
 void espnow_setup()
 {
-    // 连接WiFi以获得正确的信道配置
+    // 简单WiFi连接设置
     WiFi.mode(WIFI_MODE_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     
     DEBUG_PRINTLN("Connecting to WiFi...");
-    while (WiFi.status() != WL_CONNECTED)
-    {
+    while (WiFi.status() != WL_CONNECTED) {
         delay(500);
         DEBUG_PRINT(".");
     }
     
-#if WIFI_POWER_MAX
-    // 设置WiFi功率到最大（兼容ESP32和ESP8266）
-#if defined ESP32
-    WiFi.setTxPower(WIFI_POWER_19_5dBm);
-#elif defined ESP8266
-    WiFi.setOutputPower(20.5); // ESP8266使用setOutputPower，单位dBm
-#endif
-    DEBUG_PRINTLN("WiFi power set to maximum");
-#endif
+    DEBUG_PRINTF("WiFi Connected: %s\n", WiFi.localIP().toString().c_str());
+    DEBUG_PRINTF("MAC: %s\n", WiFi.macAddress().c_str());
     
-    DEBUG_PRINTF("Connected to %s in channel %d\n", WiFi.SSID().c_str(), WiFi.channel());
-    DEBUG_PRINTF("IP address: %s\n", WiFi.localIP().toString().c_str());
-    DEBUG_PRINTF("MAC address: %s\n", WiFi.macAddress().c_str());
-    DEBUG_PRINTLN("ESP-NOW initializing with WiFi connection...");
-
+    // 初始化ESP-NOW
     quickEspNow.onDataRcvd(dataReceived);
-
-    // 使用与WiFi相同的信道初始化ESP-NOW
-    int wifiChannel = WiFi.channel();
-    quickEspNow.begin(wifiChannel);
-    DEBUG_PRINTF("ESP-NOW initialized on channel %d\n", wifiChannel);
+    quickEspNow.begin(WiFi.channel());
+    
+    DEBUG_PRINTF("ESP-NOW initialized on channel %d\n", WiFi.channel());
 }
 
 void esp_update()
@@ -136,73 +122,50 @@ void esp_update()
     }
 }
 
-// 处理接收到的命令
+// 处理接收到的命令 - 简化版本
 void processReceivedCommand()
 {
-    if (!hasNewCommand)
-    {
-        return; // 没有新命令需要处理
-    }
-
-    // 清除新命令标志
+    if (!hasNewCommand) return;
+    
     hasNewCommand = false;
-
-    // 检查命令是否针对本设备
     uint8_t myFeederID = getCurrentFeederID();
-    if (receivedFeederID != myFeederID && receivedFeederID != 0xFF)
-    { // 0xFF为广播ID
-        DEBUG_PRINTF("Command not for this feeder (ID:%d, received:%d)\n",
-                     myFeederID, receivedFeederID);
+    
+    // 检查命令是否针对本设备（广播255或匹配ID）
+    if (receivedFeederID != myFeederID && receivedFeederID != 255) {
         return;
     }
-
-    DEBUG_PRINTF("Processing command: Type=0x%02X, FeederID=%d, Length=%d\n",
+    
+    DEBUG_PRINTF("Processing cmd: Type=0x%02X, ID=%d, Len=%d\n",
                  receivedCommandType, receivedFeederID, receivedFeedLength);
-
-    switch (receivedCommandType)
-    {
-    case CMD_FEEDER_ADVANCE:
-        handleFeederAdvanceCommand(receivedFeederID, receivedFeedLength);
-        break;
-
-    case CMD_HEARTBEAT:
-        handleHeartbeatCommand();
-        break;
-
-    case CMD_SET_FEEDER_ID:
-        handleSetFeederIDCommand(receivedFeedLength); // 使用feedLength字段传递新ID
-        break;
-
-    default:
-        DEBUG_PRINTF("Unknown command type: 0x%02X\n", receivedCommandType);
-        // sendErrorResponse(receivedFeederID, STATUS_INVALID_PARAM, "Unknown command");
-        break;
+    
+    switch (receivedCommandType) {
+        case CMD_FEEDER_ADVANCE:
+            DEBUG_PRINTF("Feed command: %d mm\n", receivedFeedLength);
+            feedTapeAction(receivedFeedLength);
+            schedulePendingResponse(myFeederID, STATUS_OK, "Feed OK");
+            break;
+            
+        case CMD_HEARTBEAT:
+            DEBUG_PRINTLN("Heartbeat received");
+            schedulePendingResponse(myFeederID, STATUS_OK, "Online");
+            break;
+            
+        case CMD_SET_FEEDER_ID:
+            DEBUG_PRINTF("Set ID command: %d\n", receivedFeedLength);
+            if (setFeederIDRemotely(receivedFeedLength)) {
+                schedulePendingResponse(receivedFeedLength, STATUS_OK, "ID Set");
+            } else {
+                schedulePendingResponse(myFeederID, STATUS_ERROR, "ID Failed");
+            }
+            break;
+            
+        default:
+            DEBUG_PRINTF("Unknown command: 0x%02X\n", receivedCommandType);
+            break;
     }
 }
 
-// 处理喂料推进命令
-void handleFeederAdvanceCommand(uint8_t feederID, uint8_t feedLength)
-{
-    DEBUG_PRINTF("Handling feeder advance: ID=%d, Length=%d\n", feederID, feedLength);
-
-    // 这里添加实际的喂料逻辑
-    // 例如：控制步进电机，检查传感器等
-    feedTapeAction(feedLength);
-
-    // 不直接发送响应，而是设置待发送的响应状态
-    schedulePendingResponse(feederID, STATUS_OK, "Feed OK");
-}
-
-// 处理心跳命令
-void handleHeartbeatCommand()
-{
-    DEBUG_PRINTLN("Received heartbeat, sending response");
-
-    uint8_t myFeederID = getCurrentFeederID();
-    schedulePendingResponse(myFeederID, STATUS_OK, "Online");
-}
-
-// 调度待发送的响应
+// 简化的响应调度
 void schedulePendingResponse(uint8_t feederID, uint8_t status, const char *message)
 {
     pendingResponseFeederID = feederID;
@@ -210,98 +173,28 @@ void schedulePendingResponse(uint8_t feederID, uint8_t status, const char *messa
     strncpy((char *)pendingResponseMessage, message, sizeof(pendingResponseMessage) - 1);
     pendingResponseMessage[sizeof(pendingResponseMessage) - 1] = '\0';
     hasPendingResponse = true;
-
-    DEBUG_PRINTF("Scheduled response: FeederID=%d, Status=0x%02X, Message=%s\n",
-                 feederID, status, message);
 }
 
-// 处理待发送的响应（在主循环中调用）
+// 简化的响应处理
 void processPendingResponse()
 {
-    if (!hasPendingResponse)
-    {
-        return; // 没有待发送的响应
-    }
-
-    // 清除待发送标志
-    hasPendingResponse = false;
-
-    DEBUG_PRINTF("Processing pending response: FeederID=%d, Status=0x%02X, Message=%s\n",
-                 pendingResponseFeederID, pendingResponseStatus, (char *)pendingResponseMessage);
-
-    // 根据状态发送相应的响应
-    if (pendingResponseStatus == STATUS_OK)
-    {
-        sendSuccessResponse(pendingResponseFeederID, (char *)pendingResponseMessage);
-    }
-    else
-    {
-        sendErrorResponse(pendingResponseFeederID, pendingResponseStatus, (char *)pendingResponseMessage);
-    }
-}
-
-// 发送成功响应
-void sendSuccessResponse(uint8_t feederID, const char *message)
-{
-    ESPNowResponse response;
-    response.handId = getCurrentFeederID(); // 使用当前设备的Feeder ID
-    response.commandType = CMD_RESPONSE;
-    response.status = STATUS_OK;
-    response.sequence = 0;
-    response.timestamp = millis();
-    strncpy(response.message, message, sizeof(response.message) - 1);
-    response.message[sizeof(response.message) - 1] = '\0';
-
-    DEBUG_PRINTF("Hand sending ESPNowResponse:\n");
-    DEBUG_PRINTF("  Size: %d bytes\n", sizeof(response));
-    DEBUG_PRINTF("  Command Type: 0x%02X\n", response.commandType);
-    DEBUG_PRINTF("  Hand ID: %d\n", response.handId);
-    DEBUG_PRINTF("  Status: 0x%02X\n", response.status);
-    DEBUG_PRINTF("  Message: %s\n", response.message);
-
-    bool result = quickEspNow.send(DEST_ADDR, (uint8_t *)&response, sizeof(response));
-    if (!result)
-    {
-        DEBUG_PRINTF("Success response sent from feeder %d\n", getCurrentFeederID());
-    }
-    else
-    {
-        DEBUG_PRINTF("Failed to send success response from feeder %d\n", getCurrentFeederID());
-    }
-}
-
-// 发送错误响应
-void sendErrorResponse(uint8_t feederID, uint8_t errorCode, const char *message)
-{
-    ESPNowResponse response;
-    response.handId = feederID;
-    response.commandType = CMD_RESPONSE;
-    response.status = errorCode;
-    response.sequence = 0;
-    response.timestamp = millis();
-    strncpy(response.message, message, sizeof(response.message) - 1);
-    response.message[sizeof(response.message) - 1] = '\0';
-
-    bool result = quickEspNow.send(DEST_ADDR, (uint8_t *)&response, sizeof(response));
-    if (!result)
-    {
-        DEBUG_PRINTF("Error response sent for feeder %d\n", feederID);
-    }
-    else
-    {
-        DEBUG_PRINTF("Failed to send error response for feeder %d\n", feederID);
-    }
-}
-
-// 处理远程设置Feeder ID命令
-void handleSetFeederIDCommand(uint8_t newFeederID)
-{
-    DEBUG_PRINTF("Received remote ID assignment: %d\n", newFeederID);
+    if (!hasPendingResponse) return;
     
-    // 调用feeder_id_manager中的函数进行设置
-    if (setFeederIDRemotely(newFeederID)) {
-        schedulePendingResponse(newFeederID, STATUS_OK, "ID Set");
-    } else {
-        schedulePendingResponse(getCurrentFeederID(), STATUS_ERROR, "ID Set Failed");
-    }
+    hasPendingResponse = false;
+    
+    DEBUG_PRINTF("Sending response: ID=%d, Status=%d, Msg=%s\n",
+                 pendingResponseFeederID, pendingResponseStatus, (char *)pendingResponseMessage);
+    
+    // 创建响应包
+    ESPNowResponse response;
+    response.handId = pendingResponseFeederID;
+    response.commandType = CMD_RESPONSE;
+    response.status = pendingResponseStatus;
+    response.sequence = 0;
+    response.timestamp = millis();
+    strncpy(response.message, (char *)pendingResponseMessage, sizeof(response.message) - 1);
+    response.message[sizeof(response.message) - 1] = '\0';
+    
+    // 发送响应
+    quickEspNow.send(ESPNOW_BROADCAST_ADDRESS, (uint8_t *)&response, sizeof(response));
 }

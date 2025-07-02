@@ -23,29 +23,16 @@ void setup()
 #if DEBUG_MODE
     DEBUG_BEGIN(115200);
     delay(1000);
-
     DEBUG_PRINTLN("\n=== Hand Controller Starting ===");
     DEBUG_PRINTF("Version: %s\n", HAND_VERSION);
-#else
-    // 正常模式下，GPIO1可用作LED等其他用途
-    pinMode(1, OUTPUT); // 例如作为状态LED
 #endif
 
     // 初始化按钮并设置回调
     initButton();
     setButtonDoubleClickCallback(onFeedButtonDoubleClick);
-    
-    DEBUG_PRINTLN("Button initialized on GPIO3");
 
     // 初始化Feeder ID管理器
     initFeederID();
-
-    // 检查是否为未分配状态
-    if (getCurrentFeederID() == 255) {
-        DEBUG_PRINTLN("=== UNASSIGNED MODE ===");
-        DEBUG_PRINTLN("Feeder ID not assigned, waiting for remote configuration...");
-        DEBUG_PRINTF("MAC Address: %s\n", WiFi.macAddress().c_str());
-    }
 
     // 初始化ESP-NOW
     espnow_setup();
@@ -53,11 +40,7 @@ void setup()
     // 初始化舵机
     setup_Servo();
 
-#if DEBUG_MODE
     DEBUG_PRINTLN("=== Setup Complete ===");
-    DEBUG_PRINTLN("Type 'HELP' for available commands");
-    DEBUG_PRINTLN("Double-click button to feed once");
-#endif
 }
 
 void loop()
@@ -71,10 +54,10 @@ void loop()
     // 调用舵机tick
     servoTick();
 
-    // 处理ESP-NOW
+    // 处理ESP-NOW命令和响应
     processReceivedCommand();
-    processPendingResponse(); // 处理待发送的响应
+    processPendingResponse();
 
-    // 其他循环逻辑...
+    // 简单延迟，避免看门狗
     delay(1);
 }
