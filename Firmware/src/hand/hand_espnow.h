@@ -2,21 +2,18 @@
 #define HAND_ESPNOW_H
 
 #include <Arduino.h>
+
+// 核心ESP-NOW函数
 void dataReceived(uint8_t *address, uint8_t *data, uint8_t len, signed int rssi, bool broadcast);
 void espnow_setup();
 void esp_update();
+
+// 命令处理函数
 void processReceivedCommand();
-void handleFeederAdvanceCommand(uint8_t feederID, uint8_t feedLength);
-void handleHeartbeatCommand();
 void schedulePendingResponse(uint8_t feederID, uint8_t status, const char *message);
 void processPendingResponse();
-void sendSuccessResponse(uint8_t feederID, const char *message);
-void sendErrorResponse(uint8_t feederID, uint8_t errorCode, const char *message);
 
-// 远程配置相关函数
-void handleSetFeederIDCommand(uint8_t newFeederID);
-
-// WiFi连接监控
-void checkWiFiConnection();
+// WiFi扫描函数
+int scanForSSIDChannel(const char* targetSSID);
 
 #endif // HAND_ESPNOW_H

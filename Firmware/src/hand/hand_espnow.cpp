@@ -85,20 +85,23 @@ void espnow_setup()
     // 简单WiFi连接设置
     WiFi.mode(WIFI_MODE_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    
+
     DEBUG_PRINTLN("Connecting to WiFi...");
-    while (WiFi.status() != WL_CONNECTED) {
+    while (WiFi.status() != WL_CONNECTED)
+    {
         delay(500);
         DEBUG_PRINT(".");
     }
-    
+
     DEBUG_PRINTF("WiFi Connected: %s\n", WiFi.localIP().toString().c_str());
     DEBUG_PRINTF("MAC: %s\n", WiFi.macAddress().c_str());
-    
+
     // 初始化ESP-NOW
     quickEspNow.onDataRcvd(dataReceived);
-    quickEspNow.begin(WiFi.channel());
-    
+    // 确保ESP-NOW使用与WiFi相同的频道
+    int wifiChannel = WiFi.channel();
+    quickEspNow.begin(wifiChannel);
+
     DEBUG_PRINTF("ESP-NOW initialized on channel %d\n", WiFi.channel());
 }
 
@@ -125,43 +128,49 @@ void esp_update()
 // 处理接收到的命令 - 简化版本
 void processReceivedCommand()
 {
-    if (!hasNewCommand) return;
-    
+    if (!hasNewCommand)
+        return;
+
     hasNewCommand = false;
     uint8_t myFeederID = getCurrentFeederID();
-    
+
     // 检查命令是否针对本设备（广播255或匹配ID）
-    if (receivedFeederID != myFeederID && receivedFeederID != 255) {
+    if (receivedFeederID != myFeederID && receivedFeederID != 255)
+    {
         return;
     }
-    
+
     DEBUG_PRINTF("Processing cmd: Type=0x%02X, ID=%d, Len=%d\n",
                  receivedCommandType, receivedFeederID, receivedFeedLength);
-    
-    switch (receivedCommandType) {
-        case CMD_FEEDER_ADVANCE:
-            DEBUG_PRINTF("Feed command: %d mm\n", receivedFeedLength);
-            feedTapeAction(receivedFeedLength);
-            schedulePendingResponse(myFeederID, STATUS_OK, "Feed OK");
-            break;
-            
-        case CMD_HEARTBEAT:
-            DEBUG_PRINTLN("Heartbeat received");
-            schedulePendingResponse(myFeederID, STATUS_OK, "Online");
-            break;
-            
-        case CMD_SET_FEEDER_ID:
-            DEBUG_PRINTF("Set ID command: %d\n", receivedFeedLength);
-            if (setFeederIDRemotely(receivedFeedLength)) {
-                schedulePendingResponse(receivedFeedLength, STATUS_OK, "ID Set");
-            } else {
-                schedulePendingResponse(myFeederID, STATUS_ERROR, "ID Failed");
-            }
-            break;
-            
-        default:
-            DEBUG_PRINTF("Unknown command: 0x%02X\n", receivedCommandType);
-            break;
+
+    switch (receivedCommandType)
+    {
+    case CMD_FEEDER_ADVANCE:
+        DEBUG_PRINTF("Feed command: %d mm\n", receivedFeedLength);
+        feedTapeAction(receivedFeedLength);
+        schedulePendingResponse(myFeederID, STATUS_OK, "Feed OK");
+        break;
+
+    case CMD_HEARTBEAT:
+        DEBUG_PRINTLN("Heartbeat received");
+        schedulePendingResponse(myFeederID, STATUS_OK, "Online");
+        break;
+
+    case CMD_SET_FEEDER_ID:
+        DEBUG_PRINTF("Set ID command: %d\n", receivedFeedLength);
+        if (setFeederIDRemotely(receivedFeedLength))
+        {
+            schedulePendingResponse(receivedFeedLength, STATUS_OK, "ID Set");
+        }
+        else
+        {
+            schedulePendingResponse(myFeederID, STATUS_ERROR, "ID Failed");
+        }
+        break;
+
+    default:
+        DEBUG_PRINTF("Unknown command: 0x%02X\n", receivedCommandType);
+        break;
     }
 }
 
@@ -178,13 +187,14 @@ void schedulePendingResponse(uint8_t feederID, uint8_t status, const char *messa
 // 简化的响应处理
 void processPendingResponse()
 {
-    if (!hasPendingResponse) return;
-    
+    if (!hasPendingResponse)
+        return;
+
     hasPendingResponse = false;
-    
+
     DEBUG_PRINTF("Sending response: ID=%d, Status=%d, Msg=%s\n",
                  pendingResponseFeederID, pendingResponseStatus, (char *)pendingResponseMessage);
-    
+
     // 创建响应包
     ESPNowResponse response;
     response.handId = pendingResponseFeederID;
@@ -194,7 +204,7 @@ void processPendingResponse()
     response.timestamp = millis();
     strncpy(response.message, (char *)pendingResponseMessage, sizeof(response.message) - 1);
     response.message[sizeof(response.message) - 1] = '\0';
-    
+
     // 发送响应
     quickEspNow.send(ESPNOW_BROADCAST_ADDRESS, (uint8_t *)&response, sizeof(response));
 }
