@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Feeder Monitor</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: Arial; margin: 0; padding: 20px; background: #f0f0f0; }
+        .header { background: #570DF8; color: white; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+        .stats { display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; }
+        .stat { background: white; padding: 15px; border-radius: 5px; flex: 1; min-width: 150px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-bottom: 20px; }
+        .feeder { width: 120px; height: 100px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: bold; color: white; font-size: 10px; cursor: pointer; padding: 5px; box-sizing: border-box; position: relative; }
+        .feeder-id { font-size: 14px; font-weight: bold; margin-bottom: 2px; }
+        .feeder-name { font-size: 9px; opacity: 0.9; margin-bottom: 2px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .feeder-package { font-size: 8px; opacity: 0.8; margin-bottom: 2px; }
+        .feeder-parts { font-size: 9px; opacity: 0.9; margin-bottom: 1px; }
+        .feeder-session { font-size: 8px; opacity: 0.8; }
+        .find-me-btn { position: absolute; top: 2px; right: 2px; background: rgba(255,255,255,0.8); color: #333; border: none; border-radius: 3px; padding: 2px 4px; font-size: 8px; cursor: pointer; }
+        .find-me-btn:hover { background: rgba(255,255,255,1); }
+        .offline { background: #3D4451; color: #ccc; }
+        .online { background: #22c55e; }
+        .busy { background: #f43f5e; }
+        .unassigned { background: #FBBD23; color: #333; }
+        .log { background: white; padding: 15px; border-radius: 5px; height: 200px; overflow-y: auto; }
+        .log-entry { padding: 5px 0; border-bottom: 1px solid #eee; font-family: monospace; font-size: 12px; }
+        .status-text { margin-top: 10px; font-size: 12px; }
+        
+        /* 模态框样式 */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
+        .modal-content { background-color: white; margin: 10% auto; padding: 20px; border-radius: 10px; width: 90%; max-width: 500px; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .modal-title { font-size: 18px; font-weight: bold; color: #570DF8; }
+        .close { font-size: 28px; font-weight: bold; cursor: pointer; color: #aaa; }
+        .close:hover { color: #000; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .form-group input { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        .form-buttons { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+        .btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .btn-primary { background: #570DF8; color: white; }
+        .btn-secondary { background: #6c757d; color: white; }
+        .btn-success { background: #22c55e; color: white; }
+        .btn-warning { background: #FBBD23; color: #333; }
+        .btn-small { padding: 5px 10px; font-size: 12px; margin: 2px; }
+        
+        /* Tab系统样式 */
+        .tabs { display: flex; margin-bottom: 20px; background: white; border-radius: 5px; overflow: hidden; }
+        .tab { padding: 15px 25px; cursor: pointer; background: #f8f9fa; border-right: 1px solid #dee2e6; }
+        .tab:hover { background: #e9ecef; }
+        .tab.active { background: #570DF8; color: white; }
+        .tab:last-child { border-right: none; }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        /* Feeder管理页面样式 */
+        .management-section { background: white; padding: 20px; border-radius: 5px; margin-bottom: 20px; }
+        .management-title { font-size: 18px; font-weight: bold; color: #570DF8; margin-bottom: 15px; }
+        .feeder-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border: 1px solid #dee2e6; border-radius: 5px; margin-bottom: 10px; }
+        .feeder-info { flex: 1; }
+        .feeder-actions { display: flex; gap: 10px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>PNP Feeder Monitor</h1>
+        <div id="connectionStatus">Connecting...</div>
+    </div>
+    
+    <!-- Tab导航 -->
+    <div class="tabs">
+        <div class="tab active" onclick="showTab('monitor')">Monitor</div>
+        <div class="tab" onclick="showTab('management')">Feeder Management</div>
+    </div>
+    
+    <!-- Monitor Tab Content -->
+    <div id="monitor-tab" class="tab-content active">
+        <div class="stats">
+            <div class="stat">
+                <h3>Online Count</h3>
+                <div id="onlineCount">-</div>
+            </div>
+            <div class="stat">
+                <h3>Total Count</h3>
+                <div>50</div>
+            </div>
+            <div class="stat">
+                <h3>Work Count</h3>
+                <div id="workCount">-</div>
+            </div>
+            <div class="stat">
+                <h3>Session Feeds</h3>
+                <div id="sessionFeeds">-</div>
+            </div>
+        </div>
+        
+        <div class="grid" id="feederGrid"></div>
+        
+        <div class="status-text">
+            <strong>Status Legend:</strong>
+            <span style="color: #22c55e;">■ Online</span>
+            <span style="color: #f43f5e;">■ Busy</span>
+            <span style="color: #3D4451;">■ Offline</span>
+            <span style="color: #FBBD23;">■ Unassigned</span>
+        </div>
+        
+        <div class="log" id="eventLog">
+            <div class="log-entry">System starting...</div>
+        </div>
+    </div>
+    
+    <!-- Feeder Management Tab Content -->
+    <div id="management-tab" class="tab-content">
+        <div class="management-section">
+            <div class="management-title">未分配ID的Feeder设备</div>
+            <div id="unassignedFeeders">
+                <div style="text-align: center; color: #666; padding: 20px;">加载中...</div>
+            </div>
+            <button class="btn btn-secondary" onclick="refreshUnassignedFeeders()">刷新列表</button>
+        </div>
+        
+        <div class="management-section">
+            <div class="management-title">在线Feeder设备</div>
+            <div id="onlineFeeders">
+                <div style="text-align: center; color: #666; padding: 20px;">加载中...</div>
+            </div>
+            <button class="btn btn-secondary" onclick="refreshOnlineFeeders()">刷新列表</button>
+        </div>
+    </div>
+
+    <!-- Configuration Modal -->
+    <div id="configModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="modal-title" id="modalTitle">Configure Feeder</span>
+                <span class="close" onclick="closeModal()">X</span>
+            </div>
+            <form id="configForm">
+                <input type="hidden" id="feederId" name="feederId">
+                
+                <div class="form-group">
+                    <label for="componentName">Component Name:</label>
+                    <input type="text" id="componentName" name="componentName" maxlength="15">
+                </div>
+                
+                <div class="form-group">
+                    <label for="packageType">Package Type:</label>
+                    <input type="text" id="packageType" name="packageType" maxlength="7">
+                </div>
+                
+                <div class="form-group">
+                    <label for="totalPartCount">Total Count:</label>
+                    <input type="number" id="totalPartCount" name="totalPartCount" min="0" max="65535">
+                </div>
+                
+                <div class="form-group">
+                    <label for="remainingPartCount">Remaining Count:</label>
+                    <input type="number" id="remainingPartCount" name="remainingPartCount" min="0" max="65535">
+                </div>
+                
+                <div class="form-group">
+                    <label>Statistics:</label>
+                    <div id="statsInfo" style="background: #f8f9fa; padding: 10px; border-radius: 4px; font-size: 12px;"></div>
+                </div>
+                
+                <div class="form-buttons">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveConfig()">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const ws = new WebSocket('ws://' + window.location.host + '/ws');
+        let feeders = {};
+        
+        ws.onopen = function() {
+            document.getElementById('connectionStatus').innerText = 'Connected';
+            addLog('WebSocket connected successfully');
+            // Request initial status - this will trigger a complete status update via WebSocket
+            ws.send(JSON.stringify({action: 'get_status'}));
+        };
+        
+        ws.onclose = function() {
+            document.getElementById('connectionStatus').innerText = 'Disconnected';
+            addLog('WebSocket disconnected');
+        };
+        
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            console.log('WebSocket received:', data);
+            
+            // Handle complete status updates (from periodic updates or initial request)
+            if (data.feeders && data.feeders.length !== undefined) {
+                updateFeeders(data.feeders);
+                updateStats(data);
+            }
+            // Handle single feeder updates (from configuration changes)
+            else if (data.feeder && data.feeder.id !== undefined) {
+                updateSingleFeederData(data.feeder);
+            }
+            // Handle real-time events
+            else if (data.event) {
+                handleEvent(data);
+            }
+        };
+        
+        function updateFeeders(feederData) {
+            console.log('Updating feeders with data:', feederData);
+            const grid = document.getElementById('feederGrid');
+            grid.innerHTML = '';
+            
+            for (let i = 0; i < 50; i++) {
+                const feeder = feederData.find(f => f.id === i) || {
+                    id: i, status: 0, remainingPartCount: 0, totalPartCount: 0, 
+                    sessionFeedCount: 0, componentName: 'N' + i, packageType: 'Unknown',
+                    totalFeedCount: 0
+                };
+                
+                console.log('Creating feeder', i, 'with status:', feeder.status);
+                
+                const div = document.createElement('div');
+                div.className = 'feeder';
+                div.onclick = () => showFeederConfig(feeder);
+                
+                // Create display content
+                const idDiv = document.createElement('div');
+                idDiv.className = 'feeder-id';
+                idDiv.textContent = i;
+                
+                const nameDiv = document.createElement('div');
+                nameDiv.className = 'feeder-name';
+                nameDiv.textContent = feeder.componentName || 'N' + i;
+                nameDiv.title = feeder.componentName || 'N' + i; // Hover to show full name
+                
+                const packageDiv = document.createElement('div');
+                packageDiv.className = 'feeder-package';
+                packageDiv.textContent = feeder.packageType || 'Unknown';
+                
+                const partsDiv = document.createElement('div');
+                partsDiv.className = 'feeder-parts';
+                partsDiv.textContent = (feeder.remainingPartCount || 0) + '/' + (feeder.totalPartCount || 0);
+                
+                const sessionDiv = document.createElement('div');
+                sessionDiv.className = 'feeder-session';
+                sessionDiv.textContent = 'This: ' + (feeder.sessionFeedCount || 0);
+                
+                // 为在线的Feeder添加Find Me按钮
+                if (feeder.status > 0) {
+                    const findMeBtn = document.createElement('button');
+                    findMeBtn.className = 'find-me-btn';
+                    findMeBtn.textContent = '🔍';
+                    findMeBtn.title = 'Find Me';
+                    findMeBtn.onclick = (e) => {
+                        e.stopPropagation(); // 阻止触发Feeder配置
+                        sendFindMeCommand(i);
+                    };
+                    div.appendChild(findMeBtn);
+                }
+                
+                div.appendChild(idDiv);
+                div.appendChild(nameDiv);
+                div.appendChild(packageDiv);
+                div.appendChild(partsDiv);
+                div.appendChild(sessionDiv);
+                
+                switch(feeder.status) {
+                    case 0: div.className += ' offline'; break;
+                    case 1: div.className += ' online'; break;
+                    case 2: div.className += ' busy'; break;
+                    default: div.className += ' unassigned';
+                }
+                
+                grid.appendChild(div);
+                feeders[i] = feeder;
+            }
+        }
+        
+        function updateStats(data) {
+            console.log('Updating stats with:', data);
+            document.getElementById('onlineCount').innerText = data.onlineCount || 0;
+            document.getElementById('workCount').innerText = data.totalWorkCount || 0;
+            document.getElementById('sessionFeeds').innerText = data.totalSessionFeeds || 0;
+        }
+        
+        function handleEvent(data) {
+            const now = new Date().toLocaleTimeString();
+            let message = '';
+            
+            switch(data.event) {
+                case 'command_received':
+                    message = '[' + now + '] Command received: Feeder ' + data.feederId + ' feed ' + data.feedLength + 'mm';
+                    // Update Feeder status to busy immediately
+                    updateSingleFeeder(data.feederId, 2);
+                    break;
+                case 'command_completed':
+                    message = '[' + now + '] Command completed: Feeder ' + data.feederId + ' ' + (data.success ? 'Success' : 'Failed') + ' - ' + data.message;
+                    // Update Feeder status to online idle immediately
+                    updateSingleFeeder(data.feederId, 1);
+                    break;
+                case 'hand_online':
+                    message = '[' + now + '] Hand online: Feeder ' + data.feederId;
+                    // Update Feeder status to online idle immediately
+                    updateSingleFeeder(data.feederId, 1);
+                    break;
+                case 'hand_offline':
+                    message = '[' + now + '] Hand offline: Feeder ' + data.feederId;
+                    // Update Feeder status to offline immediately
+                    updateSingleFeeder(data.feederId, 0);
+                    break;
+            }
+            
+            if (message) addLog(message);
+        }
+        
+        function updateSingleFeeder(feederId, status) {
+            const grid = document.getElementById('feederGrid');
+            const feederDiv = grid.children[feederId];
+            if (feederDiv) {
+                // Remove all status classes
+                feederDiv.className = 'feeder';
+                
+                // Add new status class
+                switch(status) {
+                    case 0: feederDiv.className += ' offline'; break;
+                    case 1: feederDiv.className += ' online'; break;
+                    case 2: feederDiv.className += ' busy'; break;
+                    default: feederDiv.className += ' unassigned';
+                }
+                
+                // Update local status data
+                if (feeders[feederId]) {
+                    feeders[feederId].status = status;
+                } else {
+                    feeders[feederId] = {id: feederId, status: status};
+                }
+                
+                // Update statistics
+                updateStatsFromFeeders();
+            }
+        }
+        
+        function updateSingleFeederData(feederData) {
+            const grid = document.getElementById('feederGrid');
+            const feederDiv = grid.children[feederData.id];
+            if (feederDiv) {
+                // Update the feeder display with new configuration
+                const nameDiv = feederDiv.querySelector('.feeder-name');
+                const packageDiv = feederDiv.querySelector('.feeder-package');
+                const partsDiv = feederDiv.querySelector('.feeder-parts');
+                const sessionDiv = feederDiv.querySelector('.feeder-session');
+                
+                if (nameDiv) {
+                    nameDiv.textContent = feederData.componentName || 'N' + feederData.id;
+                    nameDiv.title = feederData.componentName || 'N' + feederData.id;
+                }
+                if (packageDiv) {
+                    packageDiv.textContent = feederData.packageType || 'Unknown';
+                }
+                if (partsDiv) {
+                    partsDiv.textContent = (feederData.remainingPartCount || 0) + '/' + (feederData.totalPartCount || 0);
+                }
+                if (sessionDiv) {
+                    sessionDiv.textContent = 'This: ' + (feederData.sessionFeedCount || 0);
+                }
+                
+                // Update onclick handler with new data
+                feederDiv.onclick = () => showFeederConfig(feederData);
+                
+                // Update local data
+                feeders[feederData.id] = feederData;
+                
+                addLog('Feeder ' + feederData.id + ' configuration updated via WebSocket');
+            }
+        }
+        
+        function updateStatsFromFeeders() {
+            let onlineCount = 0;
+            let busyCount = 0;
+            
+            for (let i = 0; i < 50; i++) {
+                const feeder = feeders[i];
+                if (feeder && feeder.status > 0) {
+                    onlineCount++;
+                    if (feeder.status === 2) {
+                        busyCount++;
+                    }
+                }
+            }
+            
+            document.getElementById('onlineCount').innerText = onlineCount;
+        }
+        
+        function showFeederConfig(feeder) {
+            document.getElementById('feederId').value = feeder.id;
+            document.getElementById('componentName').value = feeder.componentName || 'N' + feeder.id;
+            document.getElementById('packageType').value = feeder.packageType || 'Unknown';
+            document.getElementById('totalPartCount').value = feeder.totalPartCount || 0;
+            document.getElementById('remainingPartCount').value = feeder.remainingPartCount || 0;
+            
+            document.getElementById('modalTitle').textContent = 'Configure Feeder ' + feeder.id;
+            
+            // Display statistics
+            const statsInfo = 
+                'Total feeds: ' + (feeder.totalFeedCount || 0) + '<br>' +
+                'Session feeds: ' + (feeder.sessionFeedCount || 0) + '<br>' +
+                'Status: ' + getStatusText(feeder.status);
+            document.getElementById('statsInfo').innerHTML = statsInfo;
+            
+            document.getElementById('configModal').style.display = 'block';
+        }
+        
+        function closeModal() {
+            document.getElementById('configModal').style.display = 'none';
+        }
+        
+        function getStatusText(status) {
+            switch(status) {
+                case 0: return 'Offline';
+                case 1: return 'Online Idle';
+                case 2: return 'Busy';
+                default: return 'Unassigned';
+            }
+        }
+        
+        function saveConfig() {
+            const data = {
+                id: parseInt(document.getElementById('feederId').value),
+                componentName: document.getElementById('componentName').value.trim(),
+                packageType: document.getElementById('packageType').value.trim(),
+                totalPartCount: parseInt(document.getElementById('totalPartCount').value) || 0,
+                remainingPartCount: parseInt(document.getElementById('remainingPartCount').value) || 0
+            };
+            
+            fetch('/api/feeder/config', {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            }).then(response => {
+                if (response.ok) {
+                    addLog('Feeder ' + data.id + ' config updated');
+                    closeModal();
+                    // Note: Feeder config changes will be reflected via WebSocket updates
+                } else {
+                    addLog('Feeder ' + data.id + ' config update failed');
+                    alert('Configuration update failed, please try again');
+                }
+            }).catch(error => {
+                console.error('Error:', error);
+                addLog('Feeder ' + data.id + ' config update error');
+                alert('Network error, please try again');
+            });
+        }
+        
+        // Click outside modal to close
+        window.onclick = function(event) {
+            const modal = document.getElementById('configModal');
+            if (event.target === modal) {
+                closeModal();
+            }
+        }
+        
+        function addLog(message) {
+            const log = document.getElementById('eventLog');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = message;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+            
+            // Limit log entries
+            while (log.children.length > 100) {
+                log.removeChild(log.firstChild);
+            }
+        }
+        
+        // Tab切换功能
+        function showTab(tabName) {
+            // 隐藏所有tab内容
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabContents.forEach(content => content.classList.remove('active'));
+            
+            // 移除所有tab的active状态
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => tab.classList.remove('active'));
+            
+            // 显示选中的tab内容
+            document.getElementById(tabName + '-tab').classList.add('active');
+            
+            // 设置选中的tab为active
+            event.target.classList.add('active');
+            
+            // 如果切换到管理页面，刷新数据
+            if (tabName === 'management') {
+                refreshUnassignedFeeders();
+                refreshOnlineFeeders();
+            }
+        }
+        
+        // 发送Find Me命令
+        function sendFindMeCommand(feederId) {
+            fetch('/api/feeder/findme', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({feederId: feederId})
+            }).then(response => {
+                if (response.ok) {
+                    addLog('Find Me command sent to Feeder ' + feederId);
+                } else {
+                    addLog('Find Me command failed for Feeder ' + feederId);
+                }
+            }).catch(error => {
+                console.error('Error:', error);
+                addLog('Find Me command error for Feeder ' + feederId);
+            });
+        }
+        
+        // 刷新未分配Feeder列表
+        function refreshUnassignedFeeders() {
+            fetch('/api/feeders/unassigned')
+                .then(response => response.json())
+                .then(data => {
+                    const container = document.getElementById('unassignedFeeders');
+                    container.innerHTML = '';
+                    
+                    console.log('Unassigned feeders API response:', data); // 调试日志
+                    
+                    if (data.feeders && data.feeders.length > 0) {
+                        data.feeders.forEach(hand => {
+                            const div = document.createElement('div');
+                            div.className = 'feeder-item';
+                            
+                            // 显示更丰富的信息
+                            const lastHeartbeat = hand.lastHeartbeat ? new Date(hand.lastHeartbeat).toLocaleTimeString() : '未知';
+                            
+                            div.innerHTML = `
+                                <div class="feeder-info">
+                                    <strong>IP: ${hand.ip}</strong><br>
+                                    <small>端口: ${hand.port} | 信息: ${hand.handInfo || hand.info || 'Unknown'}</small><br>
+                                    <small>最后心跳: ${lastHeartbeat}</small>
+                                </div>
+                                <div class="feeder-actions">
+                                    <button class="btn btn-warning btn-small" onclick="assignFeederID('${hand.ip}', ${hand.port})">分配ID</button>
+                                    <button class="btn btn-success btn-small" onclick="sendFindMeToUnassigned('${hand.ip}', ${hand.port})">Find Me</button>
+                                </div>
+                            `;
+                            container.appendChild(div);
+                        });
+                        
+                        // 显示统计信息
+                        const statsDiv = document.createElement('div');
+                        statsDiv.style.cssText = 'text-align: center; color: #666; padding: 10px; border-top: 1px solid #e5e7eb; margin-top: 10px;';
+                        statsDiv.innerHTML = `找到 ${data.feeders.length} 个未分配设备（总在线数: ${data.onlineCount || 0}）`;
+                        container.appendChild(statsDiv);
+                    } else {
+                        container.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">当前没有未分配ID的设备</div>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error refreshing unassigned feeders:', error);
+                    document.getElementById('unassignedFeeders').innerHTML = '<div style="text-align: center; color: #f43f5e; padding: 20px;">加载失败: ' + error.message + '</div>';
+                });
+        }
+        
+        // 刷新在线Feeder列表
+        function refreshOnlineFeeders() {
+            const container = document.getElementById('onlineFeeders');
+            container.innerHTML = '';
+            
+            // 基于当前feeders数据生成在线设备列表
+            for (let i = 0; i < 50; i++) {
+                const feeder = feeders[i];
+                if (feeder && feeder.status > 0) {
+                    const div = document.createElement('div');
+                    div.className = 'feeder-item';
+                    div.innerHTML = `
+                        <div class="feeder-info">
+                            <strong>Feeder ${i}: ${feeder.componentName || 'N' + i}</strong><br>
+                            <small>状态: ${feeder.status === 1 ? '在线' : '忙碌'} | 包装: ${feeder.packageType || 'Unknown'} | 剩余: ${feeder.remainingPartCount || 0}/${feeder.totalPartCount || 0}</small>
+                        </div>
+                        <div class="feeder-actions">
+                            <button class="btn btn-success btn-small" onclick="sendFindMeCommand(${i})">Find Me</button>
+                            <button class="btn btn-primary btn-small" onclick="showFeederConfig(feeders[${i}])">配置</button>
+                        </div>
+                    `;
+                    container.appendChild(div);
+                }
+            }
+            
+            if (container.children.length === 0) {
+                container.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">当前没有在线设备</div>';
+            }
+        }
+        
+        // 分配Feeder ID
+        function assignFeederID(ip, port) {
+            const newId = prompt('请输入要分配的Feeder ID (0-49):');
+            if (newId === null) return;
+            
+            const id = parseInt(newId);
+            if (isNaN(id) || id < 0 || id >= 50) {
+                alert('无效的ID，请输入0-49之间的数字');
+                return;
+            }
+            
+            fetch('/api/feeder/assign', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ip: ip, port: port, feederId: id})
+            }).then(response => {
+                if (response.ok) {
+                    addLog('Feeder ID ' + id + ' assigned to ' + ip + ':' + port);
+                    setTimeout(() => refreshUnassignedFeeders(), 1000);
+                } else {
+                    addLog('Failed to assign Feeder ID ' + id);
+                    alert('分配失败，请重试');
+                }
+            }).catch(error => {
+                console.error('Error:', error);
+                addLog('Error assigning Feeder ID');
+                alert('网络错误，请重试');
+            });
+        }
+        
+        // 给未分配设备发送Find Me命令
+        function sendFindMeToUnassigned(ip, port) {
+            fetch('/api/feeder/findme-unassigned', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ip: ip, port: port})
+            }).then(response => {
+                if (response.ok) {
+                    addLog('Find Me command sent to unassigned device ' + ip + ':' + port);
+                } else {
+                    addLog('Find Me command failed for unassigned device');
+                }
+            }).catch(error => {
+                console.error('Error:', error);
+                addLog('Find Me command error');
+            });
+        }
+        
+        // Note: Status updates are now handled entirely via WebSocket events
+        // No more periodic polling needed - all changes are pushed in real-time
+    </script>
+</body>
+</html>
