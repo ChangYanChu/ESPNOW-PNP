@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include "hand_config.h"
 #include "feeder_id_manager.h"
-#include "hand_espnow.h"
+#include "hand_udp.h"     // 使用UDP通信替代ESP-NOW
 #include "hand_servo.h"
 #include "hand_led.h"
 #include "hand_button.h"
@@ -34,8 +34,8 @@ void setup()
     // 初始化Feeder ID管理器
     initFeederID();
 
-    // 初始化ESP-NOW
-    espnow_setup();
+    // 初始化UDP通信
+    udp_setup();
 
     // 初始化舵机
     setup_Servo();
@@ -54,7 +54,10 @@ void loop()
     // 调用舵机tick
     servoTick();
 
-    // 处理ESP-NOW命令和响应
+    // 处理UDP通信
+    udp_update();
+    
+    // 处理UDP命令和响应
     processReceivedCommand();
     processPendingResponse();
 

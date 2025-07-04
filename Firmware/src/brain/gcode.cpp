@@ -1,5 +1,5 @@
 #include "gcode.h"
-#include "brain_espnow.h"
+#include "brain_udp.h"    // 添加UDP功能支持
 #include "lcd.h"
 #include <WiFi.h>
 #include "brain_tcp.h"
@@ -9,13 +9,9 @@ String inputBuffer = ""; // Buffer for incoming G-Code lines
 // Add these lines if not already defined elsewhere:
 #define FEEDER_ENABLED 1
 
-// 外部变量声明，用于访问未分配Hand列表
-struct UnassignedHand {
-    uint8_t macAddr[6];
-    uint32_t lastSeen;
-    bool active;
-};
-extern UnassignedHand unassignedHands[10];
+// UnassignedHand结构在brain_udp.h中已定义
+// extern UnassignedHand unassignedHands[10]; // 在brain_udp.h中已声明
+
 #define FEEDER_DISABLED 0
 uint8_t feederEnabled = FEEDER_DISABLED;
 
@@ -62,7 +58,6 @@ void sendAnswer(uint8_t error, String message)
     // 如果有TCP客户端连接，也发送给TCP客户端
     WiFiClient* tcpClient = getCurrentTcpClient();
     if (tcpClient && tcpClient->connected()) {
-        Serial.println("Sending response to TCP client..."); // 调试信息
         String fullResponse = "";
         if (error == 0) {
             tcpClient->print("ok ");
@@ -74,11 +69,6 @@ void sendAnswer(uint8_t error, String message)
         tcpClient->println(message);
         fullResponse += message;
         tcpClient->flush(); // 确保数据发送
-        Serial.print("Response sent to TCP client: [");
-        Serial.print(fullResponse);
-        Serial.println("]");
-    } else {
-        Serial.println("No TCP client connected or client disconnected"); // 调试信息
     }
 
 #if HAS_LCD
@@ -123,7 +113,6 @@ void sendAnswer(int error, const __FlashStringHelper *message)
     // 如果有TCP客户端连接，也发送给TCP客户端
     WiFiClient* tcpClient = getCurrentTcpClient();
     if (tcpClient && tcpClient->connected()) {
-        Serial.println("Sending response to TCP client..."); // 调试信息
         String fullResponse = "";
         if (error == 0) {
             tcpClient->print("ok ");
@@ -135,11 +124,6 @@ void sendAnswer(int error, const __FlashStringHelper *message)
         tcpClient->println(msg);
         fullResponse += msg;
         tcpClient->flush(); // 确保数据发送
-        Serial.print("Response sent to TCP client: [");
-        Serial.print(fullResponse);
-        Serial.println("]");
-    } else {
-        Serial.println("No TCP client connected or client disconnected"); // 调试信息
     }
 
 #if HAS_LCD
@@ -287,15 +271,15 @@ void processCommand()
 #endif
 
         // start feeding
-        // 通过ESP-NOW发送命令到Hand
-        bool triggerFeedOK = sendFeederAdvanceCommand((uint8_t)signedFeederNo, feedLength);
+        // 通过UDP发送命令到Hand，并等待响应后回复TCP客户端
+        bool triggerFeedOK = sendFeederAdvanceCommand((uint8_t)signedFeederNo, feedLength, UDP_COMMAND_TIMEOUT_MS, true);
         if (!triggerFeedOK)
         {
-            // ESP-NOW发送失败，立即报告错误
+            // UDP发送失败，立即报告错误
             sendAnswer(1, F("Failed to send feeder advance command"));
         }
-        // 如果ESP-NOW发送成功，不立即回复
-        // 等待Hand处理完成后通过CMD_RESPONSE回复
+        // 如果UDP发送成功，不立即回复
+        // 等待Hand处理完成后通过UDP响应处理自动回复TCP客户端
 
         break;
     }
@@ -308,49 +292,15 @@ void processCommand()
         break;
     }
 
-    case MCODE_LIST_UNASSIGNED: // M630 - 列出未分配ID的Hand
+    case 630: // MCODE_LIST_UNASSIGNED - 已迁移到Web界面
     {
-        String response;
-        listUnassignedHands(response);
-        sendAnswer(0, response);
+        sendAnswer(0, "This command has been moved to Web interface. Please use 'Feeder Management' tab in the web interface.");
         break;
     }
 
-    case MCODE_SET_HAND_ID: // M631 N<hand_index> P<new_feeder_id>
+    case 631: // MCODE_SET_HAND_ID - 已迁移到Web界面
     {
-        int n_value = parseParameter('N', -1);
-        int p_value = parseParameter('P', -1);
-        
-        if (n_value >= 0 && n_value < 10 && p_value >= 0 && p_value < TOTAL_FEEDERS) { // 简化为直接使用10
-            // 查找对应的未分配Hand
-            uint32_t now = millis();
-            int activeIndex = -1;
-            int currentIndex = 0;
-            
-            for (int i = 0; i < 10; i++) { // 直接使用10，避免宏定义问题
-                if (unassignedHands[i].active && (now - unassignedHands[i].lastSeen) < 60000) {
-                    if (currentIndex == n_value) {
-                        activeIndex = i;
-                        break;
-                    }
-                    currentIndex++;
-                }
-            }
-            
-            if (activeIndex >= 0) {
-                if (sendSetFeederIDCommand(unassignedHands[activeIndex].macAddr, p_value)) {
-                    sendAnswer(0, "ID assignment command sent");
-                    // 从未分配列表中移除
-                    unassignedHands[activeIndex].active = false;
-                } else {
-                    sendAnswer(1, "Failed to send ID assignment command");
-                }
-            } else {
-                sendAnswer(1, "Hand index not found");
-            }
-        } else {
-            sendAnswer(1, "Invalid parameters (N: hand index, P: new feeder ID 0-49)");
-        }
+        sendAnswer(0, "This command has been moved to Web interface. Please use 'Feeder Management' tab to assign Feeder IDs.");
         break;
     }
        

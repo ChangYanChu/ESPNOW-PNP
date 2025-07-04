@@ -2,7 +2,8 @@
 #define HAND_CONFIG_H
 
 #include <Arduino.h>
-#include "../common/espnow_protocol.h"
+// 注释掉不再需要的ESP-NOW协议包含，UDP协议已自行包含所需结构
+// #include "../common/espnow_protocol.h"
 
 // =============================================================================
 // Hand控制器配置
@@ -32,8 +33,8 @@
 #define FEEDER_ID_ADDR 0 // Feeder ID存储地址
 
 // WiFi配置 - 与Brain端保持一致
-#define WIFI_SSID "HONOR"
-#define WIFI_PASSWORD "chu107610."
+#define WIFI_SSID "HUAWEI-P99"
+#define WIFI_PASSWORD "12345678"
 #define WIFI_POWER_MAX true  // 设置WiFi功率到最大
 
 #endif
@@ -44,7 +45,7 @@
 // 串口调试控制宏
 // 开发模式: 启用串口日志和命令
 // 正常模式: 禁用串口，GPIO1可用作其他用途（如LED）
-#define DEBUG_MODE 1  // 1=开发模式(启用串口), 0=正常模式(禁用串口)
+#define DEBUG_MODE 0  // 1=开发模式(启用串口), 0=正常模式(禁用串口)
 
 // 如果启用调试模式，定义串口输出宏
 #if DEBUG_MODE

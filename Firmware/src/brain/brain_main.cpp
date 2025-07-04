@@ -1,6 +1,6 @@
 #include <Arduino.h>
 #include "brain_config.h"
-#include "brain_espnow.h"
+#include "brain_udp.h"     // 使用UDP通信替代ESP-NOW
 #include "brain_web.h"
 #include "gcode.h"
 #include "lcd.h"
@@ -12,6 +12,7 @@ void setup()
     Serial.begin(115200);
     delay(1000); // 等待串口稳定
     Serial.println("ESP-NOW PNP Brain Controller Starting...");
+
 #if HAS_LCD
     // 只有在有LCD硬件时才初始化LCD
     lcd_setup();
@@ -21,9 +22,9 @@ void setup()
     Serial.println("Running without LCD display");
 #endif
 
-    // 初始化ESP-NOW通信
-    // Serial.println("Initializing ESP-NOW...");
-    espnow_setup();
+    // 初始化UDP通信
+    Serial.println("Initializing UDP communication...");
+    brain_udp_setup();
 
     // 初始化feeder状态数组
     initFeederStatus();
@@ -35,8 +36,16 @@ void setup()
     tcp_setup(); // 初始化TCP服务器
     web_setup(); // 初始化Web服务器
 
+    // 输出网络信息
+    Serial.printf("WiFi连接状态: %s\n", WiFi.status() == WL_CONNECTED ? "已连接" : "未连接");
+    Serial.printf("本地IP地址: %s\n", WiFi.localIP().toString().c_str());
+    Serial.printf("TCP服务器端口: 8080\n");
+    Serial.printf("Web服务器端口: 80\n");
+    Serial.printf("UDP监听端口: %d\n", UDP_BRAIN_PORT);
+
     // 等待系统稳定
     delay(200);
+    Serial.println("系统初始化完成，进入主循环");
 }
 
 void loop()
@@ -52,14 +61,11 @@ void loop()
     // 处理TCP通信
     tcp_loop();
 
-    // 处理接收到的ESP-NOW响应
-    processReceivedResponse();
+    // 处理UDP通信
+    brain_udp_update();
 
-    // 检查命令超时
-    checkCommandTimeout();
-
-    // 发送心跳包检测Hand在线状态
-    sendHeartbeat();
+    // 处理Web服务器更新
+    web_update();
 
 #if HAS_LCD
     // 更新在线手部数量 (只有在有LCD时才需要)

@@ -1,15 +1,23 @@
 #include "brain_web.h"
 #include "brain_config.h"
-#include "brain_espnow.h"
+#include "brain_udp.h"     // 替换ESP-NOW为UDP
 #include "gcode.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
+#if defined(ESP32)
+#include <FS.h>
+#include <LittleFS.h>
+#elif defined(ESP8266)
+#include <FS.h>
+#include <LittleFS.h>
+#endif
 
 // External variable declarations
 extern uint32_t lastHandResponse[TOTAL_FEEDERS];
-extern FeederStatus feederStatusArray[NUMBER_OF_FEEDER];
+extern FeederStatus feederStatusArray[TOTAL_FEEDERS];
 extern uint32_t totalSessionFeeds;
 extern uint32_t totalWorkCount;
+extern UnassignedHand unassignedHands[10];
 
 AsyncWebServer webServer(80);
 AsyncWebSocket ws("/ws");
@@ -24,14 +32,17 @@ String getFeederStatusJSON() {
         JsonObject feeder = feeders.createNestedObject();
         feeder["id"] = i;
         
-        // 判断状态：0=离线, 1=在线空闲, 2=忙碌
-        if (lastHandResponse[i] > 0 && (now - lastHandResponse[i] < 30000)) {
+        // 使用UDP连接状态判断：0=离线, 1=在线空闲, 2=忙碌
+        const char* handStatus = getHandStatusString(i);
+        bool isOnline = (strcmp(handStatus, "在线") == 0 || strcmp(handStatus, "不稳定") == 0);
+        
+        if (isOnline) {
             if (feederStatusArray[i].waitingForResponse) {
                 feeder["status"] = 2; // 忙碌
             } else {
                 feeder["status"] = 1; // 在线空闲
             }
-            feeder["lastSeen"] = now - lastHandResponse[i];
+            feeder["lastSeen"] = 0; // UDP连接活跃
         } else {
             feeder["status"] = 0; // 离线
             feeder["lastSeen"] = -1;
@@ -51,13 +62,8 @@ String getFeederStatusJSON() {
     doc["totalWorkCount"] = totalWorkCount;
     doc["timestamp"] = now;
     
-    // Debug output
-    // Serial.printf("Web API - Online: %d, SessionFeeds: %lu, WorkCount: %lu\n", 
-    //               getOnlineHandCount(), totalSessionFeeds, totalWorkCount);
-    
     String result;
     serializeJson(doc, result);
-    // Serial.printf("JSON Response Length: %d\n", result.length());
     return result;
 }
 
@@ -69,24 +75,162 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
         client->text(getFeederStatusJSON());
     } else if (type == WS_EVT_DISCONNECT) {
         Serial.printf("WebSocket client #%u disconnected\n", client->id());
+    } else if (type == WS_EVT_DATA) {
+        AwsFrameInfo *info = (AwsFrameInfo*)arg;
+        if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
+            data[len] = 0; // Null terminate
+            String message = (char*)data;
+            
+            // Parse JSON message
+            DynamicJsonDocument doc(512);
+            DeserializationError error = deserializeJson(doc, message);
+            
+            if (!error && doc.containsKey("action")) {
+                String action = doc["action"];
+                if (action == "get_status") {
+                    // 发送完整状态更新
+                    client->text(getFeederStatusJSON());
+                }
+            }
+        }
     }
 }
 
 // Web服务器初始化
 void web_setup() {
+    // 初始化LittleFS
+    if (!LittleFS.begin(true)) {
+        Serial.println("LittleFS Mount Failed");
+        return;
+    }
+    
     // 设置WebSocket
     ws.onEvent(onWsEvent);
     webServer.addHandler(&ws);
+    
+    // API endpoint: Get unassigned feeders (必须在 /api/feeders 之前注册)
+    webServer.on("/api/feeders/unassigned", HTTP_GET, [](AsyncWebServerRequest *request){
+        Serial.println("DEBUG: /api/feeders/unassigned endpoint called");
+        
+        DynamicJsonDocument doc(2048);
+        JsonArray feeders = doc.createNestedArray("feeders");
+        uint32_t currentTime = millis();
+        int unassignedCount = 0;
+        
+        Serial.printf("DEBUG: Checking unassignedHands array...\n");
+        
+        // 查找未分配的Hand设备
+        // 1. 检查unassignedHands数组中的设备
+        for (int i = 0; i < 10; i++) {
+            if (unassignedHands[i].isValid) {
+                Serial.printf("DEBUG: Found valid unassigned device at index %d\n", i);
+                
+                // 检查设备是否还在线（30秒内有心跳）
+                if (currentTime - unassignedHands[i].lastSeen < 30000) {
+                    Serial.printf("DEBUG: Device is still online (last seen %lu ms ago)\n", 
+                                  currentTime - unassignedHands[i].lastSeen);
+                    
+                    JsonObject feeder = feeders.createNestedObject();
+                    IPAddress deviceIP(unassignedHands[i].mac[0], unassignedHands[i].mac[1], 
+                                     unassignedHands[i].mac[2], unassignedHands[i].mac[3]);
+                    feeder["id"] = 255; // 未分配ID
+                    feeder["ip"] = deviceIP.toString();
+                    feeder["port"] = UDP_HAND_PORT;
+                    feeder["status"] = 1; // 在线状态
+                    feeder["info"] = String(unassignedHands[i].info);
+                    feeder["lastSeen"] = currentTime - unassignedHands[i].lastSeen;
+                    feeder["feederId"] = 255;
+                    feeder["isUnassigned"] = true;
+                    
+                    // 添加默认的统计信息
+                    feeder["totalFeedCount"] = 0;
+                    feeder["sessionFeedCount"] = 0;
+                    feeder["totalPartCount"] = 0;
+                    feeder["remainingPartCount"] = 0;
+                    feeder["componentName"] = "未分配";
+                    feeder["packageType"] = "N/A";
+                    
+                    unassignedCount++;
+                } else {
+                    Serial.printf("DEBUG: Device is too old (last seen %lu ms ago)\n", 
+                                  currentTime - unassignedHands[i].lastSeen);
+                }
+            }
+        }
+        
+        Serial.printf("DEBUG: Checking connectedHands array...\n");
+        
+        // 2. 检查connectedHands数组中feederId为255的设备（备用检查）
+        for (int i = 0; i < TOTAL_FEEDERS; i++) {
+            if (connectedHands[i].isOnline && connectedHands[i].feederId == 255) {
+                Serial.printf("DEBUG: Found connected hand with feederId 255 at index %d\n", i);
+                
+                // 检查设备是否还在线（30秒内有心跳）
+                if (currentTime - connectedHands[i].lastSeen < 30000) {
+                    JsonObject feeder = feeders.createNestedObject();
+                    feeder["id"] = 255; // 未分配ID
+                    feeder["ip"] = connectedHands[i].ip.toString();
+                    feeder["port"] = connectedHands[i].port;
+                    feeder["status"] = 1; // 在线状态
+                    feeder["info"] = String(connectedHands[i].handInfo);
+                    feeder["lastSeen"] = currentTime - connectedHands[i].lastSeen;
+                    feeder["feederId"] = 255;
+                    feeder["isUnassigned"] = true;
+                    
+                    // 添加默认的统计信息
+                    feeder["totalFeedCount"] = 0;
+                    feeder["sessionFeedCount"] = 0;
+                    feeder["totalPartCount"] = 0;
+                    feeder["remainingPartCount"] = 0;
+                    feeder["componentName"] = "未分配";
+                    feeder["packageType"] = "N/A";
+                    
+                    unassignedCount++;
+                }
+            }
+        }
+        
+        Serial.printf("DEBUG: Found %d unassigned devices\n", unassignedCount);
+        
+        // 添加统计信息（与主API保持一致的结构）
+        doc["onlineCount"] = unassignedCount;
+        doc["totalSessionFeeds"] = totalSessionFeeds;
+        doc["totalWorkCount"] = totalWorkCount;
+        doc["timestamp"] = currentTime;
+        doc["unassignedCount"] = unassignedCount; // 额外的未分配设备数量
+        
+        String result;
+        serializeJson(doc, result);
+        Serial.printf("DEBUG: Returning JSON: %s\n", result.c_str());
+        request->send(200, "application/json", result);
+    });
     
     // API端点：获取所有Feeder状态
     webServer.on("/api/feeders", HTTP_GET, [](AsyncWebServerRequest *request){
         request->send(200, "application/json", getFeederStatusJSON());
     });
     
+    // 调试API：获取UDP连接状态
+    webServer.on("/api/debug/hands", HTTP_GET, [](AsyncWebServerRequest *request){
+        DynamicJsonDocument doc(2048);
+        JsonArray hands = doc.createNestedArray("hands");
+        
+        for (int i = 0; i < TOTAL_FEEDERS; i++) {
+            JsonObject hand = hands.createNestedObject();
+            hand["id"] = i;
+            hand["status"] = getHandStatusString(i);
+            hand["onlineCount"] = getOnlineHandCount();
+        }
+        
+        String result;
+        serializeJson(doc, result);
+        request->send(200, "application/json", result);
+    });
+    
     // API端点：获取未分配Hand列表
     webServer.on("/api/unassigned", HTTP_GET, [](AsyncWebServerRequest *request){
         String response;
-        listUnassignedHands(response);
+        getUnassignedHandsList(response);
         
         DynamicJsonDocument doc(1024);
         doc["data"] = response;
@@ -130,408 +274,172 @@ void web_setup() {
         // Save configuration
         saveFeederConfig();
         
+        // 通过WebSocket推送单个Feeder配置更新
+        if (ws.count() > 0) {
+            DynamicJsonDocument updateDoc(512);
+            JsonObject feeder = updateDoc.createNestedObject("feeder");
+            feeder["id"] = id;
+            feeder["componentName"] = feederStatusArray[id].componentName;
+            feeder["packageType"] = feederStatusArray[id].packageType;
+            feeder["totalPartCount"] = feederStatusArray[id].totalPartCount;
+            feeder["remainingPartCount"] = feederStatusArray[id].remainingPartCount;
+            feeder["sessionFeedCount"] = feederStatusArray[id].sessionFeedCount;
+            feeder["totalFeedCount"] = feederStatusArray[id].totalFeedCount;
+            
+            // 添加状态信息
+            const char* handStatus = getHandStatusString(id);
+            bool isOnline = (strcmp(handStatus, "在线") == 0 || strcmp(handStatus, "不稳定") == 0);
+            if (isOnline) {
+                feeder["status"] = feederStatusArray[id].waitingForResponse ? 2 : 1;
+            } else {
+                feeder["status"] = 0;
+            }
+            
+            String updateResult;
+            serializeJson(updateDoc, updateResult);
+            ws.textAll(updateResult);
+        }
+        
         request->send(200, "application/json", "{\"success\":true}");
     });
     
-    // 提供静态HTML页面
-    webServer.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-        request->send(200, "text/html", R"rawhtml(
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Feeder Monitor</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body { font-family: Arial; margin: 0; padding: 20px; background: #f0f0f0; }
-        .header { background: #570DF8; color: white; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
-        .stats { display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; }
-        .stat { background: white; padding: 15px; border-radius: 5px; flex: 1; min-width: 150px; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-bottom: 20px; }
-        .feeder { width: 120px; height: 80px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: bold; color: white; font-size: 10px; cursor: pointer; padding: 5px; box-sizing: border-box; }
-        .feeder-id { font-size: 14px; font-weight: bold; margin-bottom: 2px; }
-        .feeder-name { font-size: 9px; opacity: 0.9; margin-bottom: 2px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .feeder-package { font-size: 8px; opacity: 0.8; margin-bottom: 2px; }
-        .feeder-parts { font-size: 9px; opacity: 0.9; margin-bottom: 1px; }
-        .feeder-session { font-size: 8px; opacity: 0.8; }
-        .offline { background: #3D4451; color: #ccc; }
-        .online { background: #22c55e; }
-        .busy { background: #f43f5e; }
-        .unassigned { background: #FBBD23; color: #333; }
-        .log { background: white; padding: 15px; border-radius: 5px; height: 200px; overflow-y: auto; }
-        .log-entry { padding: 5px 0; border-bottom: 1px solid #eee; font-family: monospace; font-size: 12px; }
-        .status-text { margin-top: 10px; font-size: 12px; }
+    // API endpoint: Find Me command for specific feeder
+    webServer.on("/api/feeder/findme", HTTP_POST, [](AsyncWebServerRequest *request){}, NULL,
+    [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+        DynamicJsonDocument doc(256);
+        DeserializationError error = deserializeJson(doc, (char*)data);
         
-        /* 模态框样式 */
-        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
-        .modal-content { background-color: white; margin: 10% auto; padding: 20px; border-radius: 10px; width: 90%; max-width: 500px; }
-        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        .modal-title { font-size: 18px; font-weight: bold; color: #570DF8; }
-        .close { font-size: 28px; font-weight: bold; cursor: pointer; color: #aaa; }
-        .close:hover { color: #000; }
-        .form-group { margin-bottom: 15px; }
-        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
-        .form-group input { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-        .form-buttons { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
-        .btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        .btn-primary { background: #570DF8; color: white; }
-        .btn-secondary { background: #6c757d; color: white; }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>PNP Feeder Monitor</h1>
-        <div id="connectionStatus">Connecting...</div>
-    </div>
-    
-    <div class="stats">
-        <div class="stat">
-            <h3>Online Count</h3>
-            <div id="onlineCount">-</div>
-        </div>
-        <div class="stat">
-            <h3>Total Count</h3>
-            <div>50</div>
-        </div>
-        <div class="stat">
-            <h3>Work Count</h3>
-            <div id="workCount">-</div>
-        </div>
-        <div class="stat">
-            <h3>Session Feeds</h3>
-            <div id="sessionFeeds">-</div>
-        </div>
-    </div>
-    
-    <div class="grid" id="feederGrid"></div>
-    
-    <div class="status-text">
-        <strong>Status Legend:</strong>
-        <span style="color: #22c55e;">■ Online</span>
-        <span style="color: #f43f5e;">■ Busy</span>
-        <span style="color: #3D4451;">■ Offline</span>
-        <span style="color: #FBBD23;">■ Unassigned</span>
-    </div>
-    
-    <div class="log" id="eventLog">
-        <div class="log-entry">System starting...</div>
-    </div>
-
-    <!-- Configuration Modal -->
-    <div id="configModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <span class="modal-title" id="modalTitle">Configure Feeder</span>
-                <span class="close" onclick="closeModal()">X</span>
-            </div>
-            <form id="configForm">
-                <input type="hidden" id="feederId" name="feederId">
-                
-                <div class="form-group">
-                    <label for="componentName">Component Name:</label>
-                    <input type="text" id="componentName" name="componentName" maxlength="15">
-                </div>
-                
-                <div class="form-group">
-                    <label for="packageType">Package Type:</label>
-                    <input type="text" id="packageType" name="packageType" maxlength="7">
-                </div>
-                
-                <div class="form-group">
-                    <label for="totalPartCount">Total Count:</label>
-                    <input type="number" id="totalPartCount" name="totalPartCount" min="0" max="65535">
-                </div>
-                
-                <div class="form-group">
-                    <label for="remainingPartCount">Remaining Count:</label>
-                    <input type="number" id="remainingPartCount" name="remainingPartCount" min="0" max="65535">
-                </div>
-                
-                <div class="form-group">
-                    <label>Statistics:</label>
-                    <div id="statsInfo" style="background: #f8f9fa; padding: 10px; border-radius: 4px; font-size: 12px;"></div>
-                </div>
-                
-                <div class="form-buttons">
-                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-                    <button type="button" class="btn btn-primary" onclick="saveConfig()">Save</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <script>
-        const ws = new WebSocket('ws://' + window.location.host + '/ws');
-        let feeders = {};
-        
-        ws.onopen = function() {
-            document.getElementById('connectionStatus').innerText = 'Connected';
-            addLog('WebSocket connected successfully');
-        };
-        
-        ws.onclose = function() {
-            document.getElementById('connectionStatus').innerText = 'Disconnected';
-            addLog('WebSocket disconnected');
-        };
-        
-        ws.onmessage = function(event) {
-            const data = JSON.parse(event.data);
-            console.log('WebSocket received:', data);
-            if (data.feeders) {
-                updateFeeders(data.feeders);
-                updateStats(data);
-            } else if (data.event) {
-                handleEvent(data);
-            }
-        };
-        
-        function updateFeeders(feederData) {
-            const grid = document.getElementById('feederGrid');
-            grid.innerHTML = '';
-            
-            for (let i = 0; i < 50; i++) {
-                const feeder = feederData.find(f => f.id === i) || {
-                    id: i, status: 0, remainingPartCount: 0, totalPartCount: 0, 
-                    sessionFeedCount: 0, componentName: 'N' + i, packageType: 'Unknown',
-                    totalFeedCount: 0
-                };
-                
-                const div = document.createElement('div');
-                div.className = 'feeder';
-                div.onclick = () => showFeederConfig(feeder);
-                
-                // Create display content
-                const idDiv = document.createElement('div');
-                idDiv.className = 'feeder-id';
-                idDiv.textContent = i;
-                
-                const nameDiv = document.createElement('div');
-                nameDiv.className = 'feeder-name';
-                nameDiv.textContent = feeder.componentName || 'N' + i;
-                nameDiv.title = feeder.componentName || 'N' + i; // Hover to show full name
-                
-                const packageDiv = document.createElement('div');
-                packageDiv.className = 'feeder-package';
-                packageDiv.textContent = feeder.packageType || 'Unknown';
-                
-                const partsDiv = document.createElement('div');
-                partsDiv.className = 'feeder-parts';
-                partsDiv.textContent = (feeder.remainingPartCount || 0) + '/' + (feeder.totalPartCount || 0);
-                
-                const sessionDiv = document.createElement('div');
-                sessionDiv.className = 'feeder-session';
-                sessionDiv.textContent = 'This: ' + (feeder.sessionFeedCount || 0);
-                
-                div.appendChild(idDiv);
-                div.appendChild(nameDiv);
-                div.appendChild(packageDiv);
-                div.appendChild(partsDiv);
-                div.appendChild(sessionDiv);
-                
-                switch(feeder.status) {
-                    case 0: div.className += ' offline'; break;
-                    case 1: div.className += ' online'; break;
-                    case 2: div.className += ' busy'; break;
-                    default: div.className += ' unassigned';
-                }
-                
-                grid.appendChild(div);
-                feeders[i] = feeder;
-            }
+        if (error) {
+            request->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+            return;
         }
         
-        function updateStats(data) {
-            console.log('Updating stats with:', data);
-            document.getElementById('onlineCount').innerText = data.onlineCount || 0;
-            document.getElementById('workCount').innerText = data.totalWorkCount || 0;
-            document.getElementById('sessionFeeds').innerText = data.totalSessionFeeds || 0;
+        if (!doc.containsKey("feederId")) {
+            request->send(400, "application/json", "{\"error\":\"Missing feederId\"}");
+            return;
         }
         
-        function handleEvent(data) {
-            const now = new Date().toLocaleTimeString();
-            let message = '';
-            
-            switch(data.event) {
-                case 'command_received':
-                    message = '[' + now + '] Command received: Feeder ' + data.feederId + ' feed ' + data.feedLength + 'mm';
-                    // Update Feeder status to busy
-                    updateSingleFeeder(data.feederId, 2);
-                    break;
-                case 'command_completed':
-                    message = '[' + now + '] Command completed: Feeder ' + data.feederId + ' ' + (data.success ? 'Success' : 'Failed') + ' - ' + data.message;
-                    // Update Feeder status to online idle
-                    updateSingleFeeder(data.feederId, 1);
-                    break;
-                case 'hand_online':
-                    message = '[' + now + '] Hand online: Feeder ' + data.feederId;
-                    // Update Feeder status to online idle
-                    updateSingleFeeder(data.feederId, 1);
-                    break;
-                case 'hand_offline':
-                    message = '[' + now + '] Hand offline: Feeder ' + data.feederId;
-                    // Update Feeder status to offline
-                    updateSingleFeeder(data.feederId, 0);
-                    break;
-            }
-            
-            if (message) addLog(message);
+        int feederId = doc["feederId"];
+        if (feederId < 0 || feederId >= NUMBER_OF_FEEDER) {
+            String errorMsg = "{\"error\":\"Invalid feeder ID: " + String(feederId) + "\"}";
+            request->send(400, "application/json", errorMsg);
+            return;
         }
         
-        function updateSingleFeeder(feederId, status) {
-            const grid = document.getElementById('feederGrid');
-            const feederDiv = grid.children[feederId];
-            if (feederDiv) {
-                // Remove all status classes
-                feederDiv.className = 'feeder';
-                
-                // Add new status class
-                switch(status) {
-                    case 0: feederDiv.className += ' offline'; break;
-                    case 1: feederDiv.className += ' online'; break;
-                    case 2: feederDiv.className += ' busy'; break;
-                    default: feederDiv.className += ' unassigned';
-                }
-                
-                // Update local status data
-                feeders[feederId] = {id: feederId, status: status};
-                
-                // Update statistics
-                updateStatsFromFeeders();
-            }
+        // 检查Hand是否在线
+        if (!connectedHands[feederId].isOnline) {
+            String errorMsg = "{\"error\":\"Feeder " + String(feederId) + " is offline\"}";
+            request->send(400, "application/json", errorMsg);
+            return;
         }
         
-        function updateStatsFromFeeders() {
-            let onlineCount = 0;
-            let busyCount = 0;
-            
-            for (let i = 0; i < 50; i++) {
-                const feeder = feeders[i];
-                if (feeder && feeder.status > 0) {
-                    onlineCount++;
-                    if (feeder.status === 2) {
-                        busyCount++;
-                    }
-                }
-            }
-            
-            document.getElementById('onlineCount').innerText = onlineCount;
+        if (sendFindMeCommand(feederId)) {
+            String successMsg = "{\"success\":true,\"message\":\"Find Me command sent to Feeder " + String(feederId) + "\"}";
+            request->send(200, "application/json", successMsg);
+        } else {
+            String errorMsg = "{\"error\":\"Failed to send Find Me command to Feeder " + String(feederId) + "\"}";
+            request->send(500, "application/json", errorMsg);
         }
-        
-        function showFeederConfig(feeder) {
-            document.getElementById('feederId').value = feeder.id;
-            document.getElementById('componentName').value = feeder.componentName || 'N' + feeder.id;
-            document.getElementById('packageType').value = feeder.packageType || 'Unknown';
-            document.getElementById('totalPartCount').value = feeder.totalPartCount || 0;
-            document.getElementById('remainingPartCount').value = feeder.remainingPartCount || 0;
-            
-            document.getElementById('modalTitle').textContent = 'Configure Feeder ' + feeder.id;
-            
-            // Display statistics
-            const statsInfo = 
-                'Total feeds: ' + (feeder.totalFeedCount || 0) + '<br>' +
-                'Session feeds: ' + (feeder.sessionFeedCount || 0) + '<br>' +
-                'Status: ' + getStatusText(feeder.status);
-            document.getElementById('statsInfo').innerHTML = statsInfo;
-            
-            document.getElementById('configModal').style.display = 'block';
-        }
-        
-        function closeModal() {
-            document.getElementById('configModal').style.display = 'none';
-        }
-        
-        function getStatusText(status) {
-            switch(status) {
-                case 0: return 'Offline';
-                case 1: return 'Online Idle';
-                case 2: return 'Busy';
-                default: return 'Unassigned';
-            }
-        }
-        
-        function saveConfig() {
-            const data = {
-                id: parseInt(document.getElementById('feederId').value),
-                componentName: document.getElementById('componentName').value.trim(),
-                packageType: document.getElementById('packageType').value.trim(),
-                totalPartCount: parseInt(document.getElementById('totalPartCount').value) || 0,
-                remainingPartCount: parseInt(document.getElementById('remainingPartCount').value) || 0
-            };
-            
-            fetch('/api/feeder/config', {
-                method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(data)
-            }).then(response => {
-                if (response.ok) {
-                    addLog('Feeder ' + data.id + ' config updated');
-                    closeModal();
-                    // Refresh display
-                    setTimeout(() => {
-                        fetch('/api/feeders')
-                            .then(response => response.json())
-                            .then(data => {
-                                updateFeeders(data.feeders);
-                                updateStats(data);
-                            });
-                    }, 500);
-                } else {
-                    addLog('Feeder ' + data.id + ' config update failed');
-                    alert('Configuration update failed, please try again');
-                }
-            }).catch(error => {
-                console.error('Error:', error);
-                addLog('Feeder ' + data.id + ' config update error');
-                alert('Network error, please try again');
-            });
-        }
-        
-        // Click outside modal to close
-        window.onclick = function(event) {
-            const modal = document.getElementById('configModal');
-            if (event.target === modal) {
-                closeModal();
-            }
-        }
-        
-        function addLog(message) {
-            const log = document.getElementById('eventLog');
-            const entry = document.createElement('div');
-            entry.className = 'log-entry';
-            entry.textContent = message;
-            log.appendChild(entry);
-            log.scrollTop = log.scrollHeight;
-            
-            // Limit log entries
-            while (log.children.length > 100) {
-                log.removeChild(log.firstChild);
-            }
-        }
-        
-        // Periodic status refresh
-        setInterval(() => {
-            if (ws.readyState === WebSocket.OPEN) {
-                fetch('/api/feeders')
-                    .then(response => response.json())
-                    .then(data => {
-                        console.log('Fetch API response:', data);
-                        updateFeeders(data.feeders);
-                        updateStats(data);
-                    })
-                    .catch(error => {
-                        console.error('Fetch error:', error);
-                    });
-            }
-        }, 5000);
-    </script>
-</body>
-</html>
-        )rawhtml");
     });
+    
+    // API endpoint: Assign feeder ID
+    webServer.on("/api/feeder/assign", HTTP_POST, [](AsyncWebServerRequest *request){}, NULL,
+    [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+        DynamicJsonDocument doc(512);
+        DeserializationError error = deserializeJson(doc, (char*)data);
+        
+        if (error) {
+            request->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+            return;
+        }
+        
+        if (!doc.containsKey("feederId") || !doc.containsKey("ip") || !doc.containsKey("port")) {
+            request->send(400, "application/json", "{\"error\":\"Missing required fields\"}");
+            return;
+        }
+        
+        int feederId = doc["feederId"];
+        String ip = doc["ip"];
+        int port = doc["port"];
+        
+        if (feederId < 0 || feederId >= NUMBER_OF_FEEDER) {
+            request->send(400, "application/json", "{\"error\":\"Invalid feeder ID\"}");
+            return;
+        }
+        
+        // 发送设置ID命令到指定的Hand设备
+        IPAddress deviceIP;
+        if (!deviceIP.fromString(ip)) {
+            request->send(400, "application/json", "{\"error\":\"Invalid IP address\"}");
+            return;
+        }
+        
+        // 调用UDP函数发送设置ID命令
+        if (sendSetFeederIDCommandToDevice(deviceIP, port, feederId)) {
+            String successMsg = "{\"success\":true,\"message\":\"Set Feeder ID command sent to " + ip + ":" + String(port) + "\"}";
+            request->send(200, "application/json", successMsg);
+        } else {
+            String errorMsg = "{\"error\":\"Failed to send Set Feeder ID command to " + ip + ":" + String(port) + "\"}";
+            request->send(500, "application/json", errorMsg);
+        }
+    });
+    
+    // API endpoint: Find Me for unassigned device
+    webServer.on("/api/feeder/findme-unassigned", HTTP_POST, [](AsyncWebServerRequest *request){}, NULL,
+    [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+        DynamicJsonDocument doc(512);
+        DeserializationError error = deserializeJson(doc, (char*)data);
+        
+        if (error) {
+            request->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+            return;
+        }
+        
+        if (!doc.containsKey("ip") || !doc.containsKey("port")) {
+            request->send(400, "application/json", "{\"error\":\"Missing required fields\"}");
+            return;
+        }
+        
+        String ip = doc["ip"];
+        int port = doc["port"];
+        
+        // 向指定IP地址和端口发送Find Me命令
+        IPAddress deviceIP;
+        if (!deviceIP.fromString(ip)) {
+            request->send(400, "application/json", "{\"error\":\"Invalid IP address\"}");
+            return;
+        }
+        
+        // 调用UDP函数发送Find Me命令
+        if (sendFindMeCommandToDevice(deviceIP, port)) {
+            String successMsg = "{\"success\":true,\"message\":\"Find Me command sent to " + ip + ":" + String(port) + "\"}";
+            request->send(200, "application/json", successMsg);
+        } else {
+            String errorMsg = "{\"error\":\"Failed to send Find Me command to " + ip + ":" + String(port) + "\"}";
+            request->send(500, "application/json", errorMsg);
+        }
+    });
+    
+    // 提供静态HTML页面
+    webServer.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
     
     webServer.begin();
     Serial.println("Web server started on port 80");
     Serial.printf("Visit: http://%s\n", WiFi.localIP().toString().c_str());
+}
+
+// Web服务器更新函数
+void web_update() {
+    static uint32_t lastStatusUpdate = 0;
+    uint32_t now = millis();
+    
+    // 每10秒推送一次完整状态给所有WebSocket客户端
+    if (now - lastStatusUpdate > 10000) {
+        if (ws.count() > 0) {
+            ws.textAll(getFeederStatusJSON());
+        }
+        lastStatusUpdate = now;
+    }
 }
 
 // WebSocket通知函数（轻量级实现）
