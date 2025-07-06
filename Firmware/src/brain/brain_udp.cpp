@@ -44,8 +44,7 @@ uint32_t totalSessionFeeds = 0;
 uint32_t totalWorkCount = 0;
 uint32_t lastHandResponse[TOTAL_FEEDERS];
 
-// 用于gcode.cpp的兼容变量
-UnassignedHand unassignedHands[10]; // 最多跟踪10个未分配设备
+UnassignedHand unassignedHands[MAX_UNASSIGNED_HANDS];
 
 // =============================================================================
 // 核心UDP函数实现
@@ -115,7 +114,7 @@ void brain_udp_update() {
     }
 
     // 检查Hand连接状态
-    if (now - lastHandCheckTime > 30000) { // 30秒检查一次
+    if (now - lastHandCheckTime > UNASSIGNED_HAND_TIMEOUT_MS) { // 30秒检查一次
         checkHandConnections();
         lastHandCheckTime = now;
     }
@@ -279,7 +278,7 @@ void processBrainUDPData() {
         
         size_t len = udp.read(brainUdpBuffer, sizeof(brainUdpBuffer));
         if (len > 0) {
-            printUDPPacket(brainUdpBuffer, len, true);
+            // printUDPPacket(brainUdpBuffer, len, true); // 打印接收的UDP包信息
             
             UDPPacketType packetType = (UDPPacketType)brainUdpBuffer[0];
             

@@ -38,7 +38,7 @@ void tcp_loop() {
             // 如果已有客户端连接，拒绝新连接
             WiFiClient newClient = server.available();
             newClient.stop();
-            Serial.println("Additional client rejected");
+            Serial.println("Additional client rejected - existing client still connected");
         }
     }
 
@@ -47,7 +47,6 @@ void tcp_loop() {
         if (currentClient.available()) {
             while (currentClient.available()) {
                 char c = currentClient.read();
-                
                 if (c == '\n') {
                     tcpBuffer.trim();
                     if (tcpBuffer.length() > 0) {
@@ -71,6 +70,11 @@ void tcp_loop() {
                 }
             }
         }
+    } else {
+        // 添加调试信息
+        if (currentClient) {
+            Serial.println("TCP客户端已断开连接");
+        }
     }
     
     // 检查客户端是否断开
@@ -90,6 +94,14 @@ WiFiClient* getCurrentTcpClient() {
     if (currentClient && currentClient.connected()) {
         return &currentClient;
     }
+    
+    // 调试信息
+    if (!currentClient) {
+        Serial.println("getCurrentTcpClient: currentClient为空");
+    } else if (!currentClient.connected()) {
+        Serial.println("getCurrentTcpClient: currentClient未连接");
+    }
+    
     return nullptr;
 }
 
