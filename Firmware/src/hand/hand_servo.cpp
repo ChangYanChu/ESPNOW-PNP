@@ -32,25 +32,25 @@ void feedTapeAction(uint8_t feedLength)
         DEBUG_PRINTF("Action %d/%d\n", i + 1, actionCount);
 
         // 移动到90度位置
-        myservo.write(90);
+        myservo.write(DEFAULT_FULL_ADVANCE_ANGLE);
         unsigned long startTime = millis();
-        while (millis() - startTime < 300) {
+        while (millis() - startTime < DEFAULT_SETTLE_TIME) {
             myservo.tick(); // 必须持续调用tick()
             delay(1);
         }
 
         // 移动到0度位置
-        myservo.write(0);
+        myservo.write(DEFAULT_RETRACT_ANGLE);
         startTime = millis();
-        while (millis() - startTime < 300) {
+        while (millis() - startTime < DEFAULT_SETTLE_TIME) {
             myservo.tick(); // 必须持续调用tick()
             delay(1);
         }
 
         // 回到90度位置
-        myservo.write(90);
+        myservo.write(DEFAULT_FULL_ADVANCE_ANGLE);
         startTime = millis();
-        while (millis() - startTime < 300) {
+        while (millis() - startTime < DEFAULT_SETTLE_TIME) {
             myservo.tick(); // 必须持续调用tick()
             delay(1);
         }

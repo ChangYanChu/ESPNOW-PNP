@@ -69,6 +69,19 @@ void sendAnswer(uint8_t error, String message)
         tcpClient->println(message);
         fullResponse += message;
         tcpClient->flush(); // 确保数据发送
+        
+        // 添加调试信息
+        Serial.print("TCP回复已发送: ");
+        Serial.println(fullResponse);
+    } else {
+        // 添加调试信息
+        Serial.println("TCP客户端未连接或获取失败");
+        if (tcpClient) {
+            Serial.print("TCP客户端连接状态: ");
+            Serial.println(tcpClient->connected() ? "已连接" : "已断开");
+        } else {
+            Serial.println("TCP客户端指针为空");
+        }
     }
 
 #if HAS_LCD
@@ -124,6 +137,19 @@ void sendAnswer(int error, const __FlashStringHelper *message)
         tcpClient->println(msg);
         fullResponse += msg;
         tcpClient->flush(); // 确保数据发送
+        
+        // 添加调试信息
+        Serial.print("TCP回复已发送: ");
+        Serial.println(fullResponse);
+    } else {
+        // 添加调试信息
+        Serial.println("TCP客户端未连接或获取失败");
+        if (tcpClient) {
+            Serial.print("TCP客户端连接状态: ");
+            Serial.println(tcpClient->connected() ? "已连接" : "已断开");
+        } else {
+            Serial.println("TCP客户端指针为空");
+        }
     }
 
 #if HAS_LCD
@@ -153,13 +179,9 @@ float parseParameter(char code, float defaultVal)
     int codePosition = inputBuffer.indexOf(code);
     if (codePosition != -1)
     {
-        // code found in buffer
-
-        // find end of number (separated by " " (space))
         int delimiterPosition = inputBuffer.indexOf(" ", codePosition + 1);
-
+        if (delimiterPosition == -1) delimiterPosition = inputBuffer.length();
         float parsedNumber = inputBuffer.substring(codePosition + 1, delimiterPosition).toFloat();
-
         return parsedNumber;
     }
     else
@@ -210,7 +232,9 @@ void processCommand()
         }
         else if (_feederEnabled == -1)
         {
-            sendAnswer(0, ("current powerState: "));
+            String statusMsg = "current powerState: ";
+            statusMsg += (feederEnabled == FEEDER_ENABLED) ? "enabled" : "disabled";
+            sendAnswer(0, statusMsg);
         }
         else
         {
@@ -254,13 +278,6 @@ void processCommand()
         {
             // 送料长度必须为2的倍数且在2-18mm范围内
             sendAnswer(1, F("Invalid feedLength, must be even number 2-24"));
-            break;
-        }
-
-        if (((feedLength % 2) != 0) || feedLength > 24)
-        {
-            // 送料长度只能为2的倍数且最大不超过24mm
-            sendAnswer(1, F("Invalid feedLength"));
             break;
         }
 

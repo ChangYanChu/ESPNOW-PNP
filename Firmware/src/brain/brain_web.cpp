@@ -110,25 +110,24 @@ void web_setup() {
     
     // API endpoint: Get unassigned feeders (必须在 /api/feeders 之前注册)
     webServer.on("/api/feeders/unassigned", HTTP_GET, [](AsyncWebServerRequest *request){
-        Serial.println("DEBUG: /api/feeders/unassigned endpoint called");
+      
         
         DynamicJsonDocument doc(2048);
         JsonArray feeders = doc.createNestedArray("feeders");
         uint32_t currentTime = millis();
         int unassignedCount = 0;
         
-        Serial.printf("DEBUG: Checking unassignedHands array...\n");
+      
         
         // 查找未分配的Hand设备
         // 1. 检查unassignedHands数组中的设备
         for (int i = 0; i < 10; i++) {
             if (unassignedHands[i].isValid) {
-                Serial.printf("DEBUG: Found valid unassigned device at index %d\n", i);
+              
                 
                 // 检查设备是否还在线（30秒内有心跳）
                 if (currentTime - unassignedHands[i].lastSeen < 30000) {
-                    Serial.printf("DEBUG: Device is still online (last seen %lu ms ago)\n", 
-                                  currentTime - unassignedHands[i].lastSeen);
+                    
                     
                     JsonObject feeder = feeders.createNestedObject();
                     IPAddress deviceIP(unassignedHands[i].mac[0], unassignedHands[i].mac[1], 
@@ -152,19 +151,17 @@ void web_setup() {
                     
                     unassignedCount++;
                 } else {
-                    Serial.printf("DEBUG: Device is too old (last seen %lu ms ago)\n", 
-                                  currentTime - unassignedHands[i].lastSeen);
+                  
                 }
             }
         }
         
-        Serial.printf("DEBUG: Checking connectedHands array...\n");
+      
         
         // 2. 检查connectedHands数组中feederId为255的设备（备用检查）
         for (int i = 0; i < TOTAL_FEEDERS; i++) {
             if (connectedHands[i].isOnline && connectedHands[i].feederId == 255) {
-                Serial.printf("DEBUG: Found connected hand with feederId 255 at index %d\n", i);
-                
+              
                 // 检查设备是否还在线（30秒内有心跳）
                 if (currentTime - connectedHands[i].lastSeen < 30000) {
                     JsonObject feeder = feeders.createNestedObject();
@@ -189,9 +186,6 @@ void web_setup() {
                 }
             }
         }
-        
-        Serial.printf("DEBUG: Found %d unassigned devices\n", unassignedCount);
-        
         // 添加统计信息（与主API保持一致的结构）
         doc["onlineCount"] = unassignedCount;
         doc["totalSessionFeeds"] = totalSessionFeeds;
@@ -201,7 +195,7 @@ void web_setup() {
         
         String result;
         serializeJson(doc, result);
-        Serial.printf("DEBUG: Returning JSON: %s\n", result.c_str());
+       
         request->send(200, "application/json", result);
     });
     

@@ -35,8 +35,8 @@ static const unsigned long blinkIntervals[] = {
 
 void initLED() {
 #if !DEBUG_MODE
-    pinMode(1, OUTPUT);
-    digitalWrite(1, LOW);
+    pinMode(ESP01S_GPIO1, OUTPUT);
+    digitalWrite(ESP01S_GPIO1, LOW);
     ledState.lastHeartbeatTime = millis();
     ledState.currentStatus = LED_STATUS_OFF;
     ledState.findMeActive = false;
@@ -57,7 +57,7 @@ void startLEDBlink(LEDBlinkType type, int blinks) {
     ledState.ledState = false;
     ledState.currentType = type;
     ledState.blinkInterval = blinkIntervals[type];
-    digitalWrite(1, LOW);
+    digitalWrite(ESP01S_GPIO1, LOW);
 #endif
 }
 
@@ -69,7 +69,7 @@ void setLEDStatus(LEDStatus status) {
     switch (status) {
         case LED_STATUS_OFF:
             ledState.isBlinking = false;
-            digitalWrite(1, LOW);
+            digitalWrite(ESP01S_GPIO1, LOW);
             break;
             
         case LED_STATUS_WIFI_CONNECTING:
@@ -118,14 +118,14 @@ void handleLED() {
         // 处理特定闪烁模式
         if (currentTime - ledState.lastBlinkTime >= ledState.blinkInterval) {
             ledState.ledState = !ledState.ledState;
-            digitalWrite(1, ledState.ledState ? HIGH : LOW);
+            digitalWrite(ESP01S_GPIO1, ledState.ledState ? HIGH : LOW);
             ledState.blinkCount++;
             ledState.lastBlinkTime = currentTime;
             
             // 如果不是持续闪烁类型，检查是否完成
             if (ledState.targetBlinks > 0 && ledState.blinkCount >= ledState.targetBlinks) {
                 ledState.isBlinking = false;
-                digitalWrite(1, LOW); // 确保LED最终关闭
+                digitalWrite(ESP01S_GPIO1, LOW); // 确保LED最终关闭
                 
                 // 恢复到状态指示模式
                 if (!ledState.findMeActive) {
@@ -140,15 +140,15 @@ void handleLED() {
             case LED_STATUS_READY:
                 // 心跳闪烁（正常状态指示） - 每秒快闪一次
                 if (currentTime - ledState.lastHeartbeatTime > 1000) {
-                    digitalWrite(1, HIGH);
+                    digitalWrite(ESP01S_GPIO1, HIGH);
                     delay(50); // 短暂亮起
-                    digitalWrite(1, LOW);
+                    digitalWrite(ESP01S_GPIO1, LOW);
                     ledState.lastHeartbeatTime = currentTime;
                 }
                 break;
                 
             case LED_STATUS_OFF:
-                digitalWrite(1, LOW);
+                digitalWrite(ESP01S_GPIO1, LOW);
                 break;
                 
             default:
