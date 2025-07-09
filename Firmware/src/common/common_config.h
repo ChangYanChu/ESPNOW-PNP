@@ -16,8 +16,8 @@
 #define FEEDERS_PER_HAND 1      // 每个手控制的喂料器数量
 
 // WiFi配置 - 统一配置点
-#define WIFI_SSID "HONOR"
-#define WIFI_PASSWORD "chu107610."
+#define WIFI_SSID "WIFI_SSID"  // WiFi SSID
+#define WIFI_PASSWORD "WIFI_PASSWORD"
 #define WIFI_POWER_MAX true     // 设置WiFi功率到最大
 
 // 超时配置
