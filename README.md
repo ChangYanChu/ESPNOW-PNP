@@ -1,11 +1,11 @@
-# 🔧 EspNow-Feeder 项目文档
+# EspNow-Feeder 项目文档
 
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-compatible-blue.svg)](https://platformio.org/)
 [![ESP32](https://img.shields.io/badge/ESP32-C3-green.svg)](https://www.espressif.com/)
 [![ESP8266](https://img.shields.io/badge/ESP8266-01S-orange.svg)](https://www.espressif.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> 🚀 基于ESP-NOW协议的无线Pick and Place系统喂料器解决方案
+> 🚀 基于有线/串口通信的Pick and Place系统喂料器解决方案
 
 ## 0. 前前言
 项目还在更新中，可能涉及部分工程文件（3D模型 软件代码）变动。
@@ -59,13 +59,13 @@
 
 ## 2. 项目概述
 
-🎯 **ESPNOW-PNP** 是一个基于 ESP-NOW 无线通信协议的 Pick and Place (PNP) 系统组件。该系统主要由一个中央控制单元 ("Brain") 和多个执行单元 ("Hand") 组成：
+🎯 **本项目** 是一个基于有线/串口通信的 Pick and Place (PNP) 系统组件。该系统主要由一个中央控制单元 ("Brain") 和多个执行单元 ("Hand") 组成：
 
 - 🧠 **Brain 单元**: 负责接收上层指令 (如 G-code)，管理并调度 "Hand" 单元执行物料拾取和放置相关的喂料动作
 - 🤖 **Hand 单元**: 直接控制伺服电机等执行机构完成具体的喂料操作
 
 ### 🔍 项目特点
-- ✅ 无线通信，减少布线复杂度
+- ✅ 有线/串口通信，稳定可靠
 - ✅ 低成本ESP模块，性价比高
 - ✅ 模块化设计，易于扩展
 - ✅ 兼容OpenPnP等主流PnP软件
@@ -112,7 +112,7 @@ ESP01S 模块用作Hand单元，控制各个Feeder。**注意：记得买01s而�
 
 该文档包含以下详细内容：
 - 系统架构和核心组件
-- ESP-NOW 通信协议详解
+- 通信协议详解（如串口协议、数据格式等）
 - Brain 单元逻辑实现
 - Hand 单元逻辑实现  
 - 配置文件说明
@@ -246,7 +246,7 @@ M610           ; 查询喂料器状态
 #### 常见问题
 1. **编译错误**: 确保安装了所有依赖库
 2. **上传失败**: 检查串口权限和波特率设置
-3. **ESP-NOW 通信失败**: 确认两个设备在同一 WiFi 信道
+3. **通信失败**: 确认所有设备连接正常，波特率一致
 4. **Hand 无法注册**: 检查 Feeder ID 是否冲突
 
 #### 调试技巧
@@ -256,7 +256,7 @@ M610           ; 查询喂料器状态
 
 ## 8. 进一步分析和注意事项
 *   **Hand 注册**: `CMD_HAND_REGISTER` 协议已定义，但具体实现流程需进一步确认。
-*   **MAC 地址管理**: 依赖 Hand 响应心跳来动态管理
+*   **ID 地址管理**: 依赖 Hand 响应心跳来动态管理
 *   **G-code 完整性**: `gcode.cpp` 中部分 M-code 的实现可能与测试脚本或 `gcode.h` 定义存在差异，需确认最终支持的指令集。
 
 ## 9. 免责声明
