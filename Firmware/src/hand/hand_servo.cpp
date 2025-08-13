@@ -9,6 +9,7 @@ void setup_Servo()
     myservo.attach(SERVO_PIN);  // 连接舵机到指定引脚
     myservo.delayMode();        // 使用延迟模式，更稳定
     DEBUG_PRINTF("Servo attached to pin %d\n", SERVO_PIN);
+    myservo.write(DEFAULT_RETRACT_ANGLE);
     
     #ifdef ENABLE_SERVO_STARTUP_TEST
     // 开机测试舵机
