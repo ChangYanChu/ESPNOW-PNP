@@ -3,3 +3,6 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
+PandFeeder/.DS_Store
+PandFeeder/lib/.DS_Store
+PandFeeder/lib/HCPCA9685/.DS_Store
