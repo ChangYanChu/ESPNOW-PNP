@@ -27,20 +27,20 @@
 
 // Mapping from degrees to HCPCA9685::Servo units (as used in existing code)
 #ifndef SERVO_MIN_TICKS
-#define SERVO_MIN_TICKS 10
+#define SERVO_MIN_TICKS 0
 #endif
 
 #ifndef SERVO_MAX_TICKS
-#define SERVO_MAX_TICKS 450
+#define SERVO_MAX_TICKS 420
 #endif
 
 // Feed action defaults (align with hand_servo.cpp semantics)
 #ifndef DEFAULT_FULL_ADVANCE_ANGLE
-#define DEFAULT_FULL_ADVANCE_ANGLE 90
+#define DEFAULT_FULL_ADVANCE_ANGLE 180
 #endif
 
 #ifndef DEFAULT_RETRACT_ANGLE
-#define DEFAULT_RETRACT_ANGLE 0
+#define DEFAULT_RETRACT_ANGLE 55
 #endif
 
 #ifndef DEFAULT_SETTLE_TIME

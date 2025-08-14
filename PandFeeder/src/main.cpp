@@ -9,7 +9,7 @@ void setup() {
   pf_servo::init();
   pf_servo::setEnabled(true);
   pf_uart::init();
-  Serial.println(F("PandFeeder ready. Send G-code over Serial (e.g., M115, M280 P0 S90, M600 N0 F8)"));
+  // Serial.println(F("PandFeeder ready. Send G-code over Serial (e.g., M115, M280 P0 S90, M600 N0 F8)"));
 }
 
 void loop() {
