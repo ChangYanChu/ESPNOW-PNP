@@ -13,6 +13,25 @@ struct FeederRuntime {
 };
 
 static FeederRuntime g_feeders[SERVO_CHANNEL_COUNT];
+// Logical ID (0..SERVO_CHANNEL_COUNT-1) to PCA9685 physical channel
+// Custom remap for upper channels per user specification:
+// physical: 8->11,9->12,10->13,11->14,12->15,13->10,14->9,15->8 ; others identity
+static uint8_t logicalToPhysical(uint8_t id) {
+    // Identity for 0..7
+    if (id <= 7) return id;
+    // Mapping table for 8..14 logical -> physical
+    switch(id) {
+        case 8: return 15;  // logical8 -> PWM15 (described as servo8 on PWM15)
+        case 9: return 14;  // logical9 -> PWM14
+        case 10: return 13; // logical10 -> PWM13
+        case 11: return 8;  // logical11 -> PWM8
+        case 12: return 9;  // logical12 -> PWM9
+        case 13: return 10; // logical13 -> PWM10
+        case 14: return 11; // logical14 -> PWM11
+        case 15: return 12; // logical15 -> PWM12
+        default: return id; // fallback
+    }
+}
 
 namespace pf_servo {
 
@@ -84,7 +103,8 @@ bool setAngle(uint8_t id, int angleDeg) {
     if (angleDeg > SERVO_MAX_ANGLE) angleDeg = SERVO_MAX_ANGLE;
     long t = (long)(angleDeg - SERVO_MIN_ANGLE) * (g_feeders[id].cfg.maxTicks - g_feeders[id].cfg.minTicks) / (SERVO_MAX_ANGLE - SERVO_MIN_ANGLE) + g_feeders[id].cfg.minTicks;
     int ticks = (int)t;
-    pwm.Servo(id, ticks);
+    uint8_t phys = logicalToPhysical(id);
+    pwm.Servo(phys, ticks);
     g_feeders[id].lastAngle = angleDeg;
     return true;
 }

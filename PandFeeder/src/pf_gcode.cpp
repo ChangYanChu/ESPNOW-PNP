@@ -1,6 +1,7 @@
 #include "pf_gcode.h"
 #include "pf_servo.h"
 #include "pf_config.h"
+#include "pf_board.h"
 
 namespace pf_gcode {
 
@@ -30,7 +31,18 @@ static void processCommand() {
 
     switch (m) {
         case 115: { // M115: report info
-            sendAnswer(0, String("PandFeeder ready; channels=") + SERVO_CHANNEL_COUNT);
+            sendAnswer(0, String("PandFeeder ready; local_channels=") + SERVO_CHANNEL_COUNT + ",addr=" + pf_board::address() + ",base=" + pf_board::baseIndex());
+            break;
+        }
+        case 116: { // M116: report mapping table
+            uint8_t addr = pf_board::address();
+            uint16_t base = pf_board::baseIndex();
+            String msg = String("addr=") + addr + ",base=" + base + ",range=" + base + "-" + (base + SERVO_CHANNEL_COUNT - 1) + ",map=";
+            for (uint8_t i=0;i<SERVO_CHANNEL_COUNT;i++) {
+                if (i>0) msg += ",";
+                msg += (base + i); msg += "->"; msg += i; // G->L
+            }
+            sendAnswer(0, msg);
             break;
         }
         case 17: { // M17: enable
@@ -52,41 +64,41 @@ static void processCommand() {
             sendAnswer(ok ? 0 : 1, ok ? String("P=") + id + ",S=" + ang : "setAngle failed");
             break;
         }
-        case 600: { // M600 N<id> F<len> X<override?> (override unused here)
-            int id = (int)parseParam('N', -1);
+        case 600: { // M600 N<globalId> F<len>
+            int globalId = (int)parseParam('N', -1);
+            int id; if (!pf_board::globalToLocal(globalId, id)) { sendAnswer(1, "invalid id"); break; }
             int feedLen = (int)parseParam('F', 4);
-            if (id < 0 || id >= SERVO_CHANNEL_COUNT) { sendAnswer(1, "invalid id"); break; }
             bool ok = pf_servo::feed((uint8_t)id, (uint8_t)feedLen);
-            sendAnswer(ok ? 0 : 1, ok ? String("feed done N=") + id + ",F=" + feedLen : "feed failed");
+            sendAnswer(ok ? 0 : 1, ok ? String("feed done G=") + globalId + ",L=" + id + ",F=" + feedLen : "feed failed");
             break;
         }
-        case 601: { // M601 N<id> : set to full retract position
-            int id = (int)parseParam('N', -1);
-            if (id < 0 || id >= SERVO_CHANNEL_COUNT) { sendAnswer(1, "invalid id"); break; }
+        case 601: { // M601 N<globalId>
+            int globalId = (int)parseParam('N', -1);
+            int id; if (!pf_board::globalToLocal(globalId, id)) { sendAnswer(1, "invalid id"); break; }
             pf_servo::FeederConfig cfg{}; pf_servo::getConfig((uint8_t)id, cfg);
             bool ok = pf_servo::setAngle((uint8_t)id, cfg.retractAngle);
-            sendAnswer(ok ? 0 : 1, ok ? String("retract N=") + id : "retract failed");
+            sendAnswer(ok ? 0 : 1, ok ? String("retract G=") + globalId + ",L=" + id : "retract failed");
             break;
         }
-        case 602: { // M602 N<id> : report feeder status
-            int id = (int)parseParam('N', -1);
-            if (id < 0 || id >= SERVO_CHANNEL_COUNT) { sendAnswer(1, "invalid id"); break; }
+        case 602: { // M602 N<globalId>
+            int globalId = (int)parseParam('N', -1);
+            int id; if (!pf_board::globalToLocal(globalId, id)) { sendAnswer(1, "invalid id"); break; }
             pf_servo::FeederStatus st{};
             bool ok = pf_servo::getStatus((uint8_t)id, st);
             if (!ok) { sendAnswer(1, "status failed"); break; }
-            String msg = String("N=") + id + ",global=" + (st.globalEnabled?"1":"0") + ",enabled=" + (st.feederEnabled?"1":"0") + ",angle=" + st.lastAngle +
+            String msg = String("G=") + globalId + ",L=" + id + ",global=" + (st.globalEnabled?"1":"0") + ",enabled=" + (st.feederEnabled?"1":"0") + ",angle=" + st.lastAngle +
                          ",A=" + st.cfg.fullAdvanceAngle + ",B=" + st.cfg.halfAdvanceAngle + ",C=" + st.cfg.retractAngle + ",F=" + st.cfg.defaultFeedLen +
                          ",U=" + st.cfg.settleTimeMs + ",V=" + st.cfg.minTicks + ",W=" + st.cfg.maxTicks + ",X=" + (st.cfg.ignoreFeedback?"1":"0");
             sendAnswer(0, msg);
             break;
         }
-        case 603: { // M603 N<id> A<angle> (default 90 if A omitted)
-            int id = (int)parseParam('N', -1);
+        case 603: { // M603 N<globalId> A<angle>
+            int globalId = (int)parseParam('N', -1);
+            int id; if (!pf_board::globalToLocal(globalId, id)) { sendAnswer(1, "invalid id"); break; }
             int ang = (int)parseParam('A', 90);
-            if (id < 0 || id >= SERVO_CHANNEL_COUNT) { sendAnswer(1, "invalid id"); break; }
             if (ang < SERVO_MIN_ANGLE || ang > SERVO_MAX_ANGLE) { sendAnswer(1, "invalid angle"); break; }
             bool ok = pf_servo::setAngle((uint8_t)id, ang);
-            sendAnswer(ok ? 0 : 1, ok ? String("N=") + id + ",A=" + ang : "setAngle failed");
+            sendAnswer(ok ? 0 : 1, ok ? String("G=") + globalId + ",L=" + id + ",A=" + ang : "setAngle failed");
             break;
         }
         case 610: { // M610 S0/1 query without S returns state
@@ -100,7 +112,7 @@ static void processCommand() {
             }
             break;
         }
-        case 611: { // M611 N<id?> S0/1 : enable/disable specific feeder or all
+    case 611: { // M611 N<globalId?> S0/1 : enable/disable specific (global) feeder or all local
             int s = (int)parseParam('S', -1);
             int id = (int)parseParam('N', -1);
             if (s != 0 && s != 1) { sendAnswer(1, "invalid S"); break; }
@@ -110,16 +122,16 @@ static void processCommand() {
                 for (uint8_t i = 0; i < SERVO_CHANNEL_COUNT; ++i) okAll &= pf_servo::setFeederEnabled(i, s==1);
                 sendAnswer(okAll ? 0 : 1, okAll ? String("all feeders enabled=") + s : "partial failure");
             } else {
-                if (id < 0 || id >= SERVO_CHANNEL_COUNT) { sendAnswer(1, "invalid id"); break; }
-                bool ok = pf_servo::setFeederEnabled((uint8_t)id, s==1);
-                sendAnswer(ok ? 0 : 1, ok ? String("N=") + id + ",enabled=" + s : "setFeederEnabled failed");
+        int local; if (!pf_board::globalToLocal(id, local)) { sendAnswer(1, "invalid id"); break; }
+        bool ok = pf_servo::setFeederEnabled((uint8_t)local, s==1);
+        sendAnswer(ok ? 0 : 1, ok ? String("G=") + id + ",L=" + local + ",enabled=" + s : "setFeederEnabled failed");
             }
             break;
         }
-        case 620: { // M620 N<id> A B C F U V W X
-            int id = (int)parseParam('N', -1);
-            if (id < 0 || id >= SERVO_CHANNEL_COUNT) { sendAnswer(1, "invalid id"); break; }
-            pf_servo::FeederConfig cfg{}; pf_servo::getConfig((uint8_t)id, cfg);
+    case 620: { // M620 N<globalId> A B C F U V W X
+        int globalId = (int)parseParam('N', -1);
+        int id; if (!pf_board::globalToLocal(globalId, id)) { sendAnswer(1, "invalid id"); break; }
+        pf_servo::FeederConfig cfg{}; pf_servo::getConfig((uint8_t)id, cfg);
             int A = (int)parseParam('A', cfg.fullAdvanceAngle);
             int B = (int)parseParam('B', cfg.halfAdvanceAngle);
             int C = (int)parseParam('C', cfg.retractAngle);
@@ -136,15 +148,16 @@ static void processCommand() {
             cfg.fullAdvanceAngle=A; cfg.halfAdvanceAngle=B; cfg.retractAngle=C; cfg.defaultFeedLen=(uint8_t)F;
             cfg.settleTimeMs=(uint16_t)U; cfg.minTicks=(uint16_t)V; cfg.maxTicks=(uint16_t)W; cfg.ignoreFeedback=(X!=0);
             bool ok = pf_servo::setConfig((uint8_t)id, cfg);
-            sendAnswer(ok ? 0 : 1, ok ? String("cfg saved N=") + id : "cfg save failed");
+            sendAnswer(ok ? 0 : 1, ok ? String("cfg saved G=") + globalId + ",L=" + id : "cfg save failed");
             break;
         }
-        case 621: { // M621: read config for all feeders
+        case 621: { // M621: read config for all local feeders with global ids
             String msg;
+            uint16_t base = pf_board::baseIndex();
             for (uint8_t i=0;i<SERVO_CHANNEL_COUNT;i++) {
                 pf_servo::FeederConfig c{}; pf_servo::getConfig(i,c);
                 if (i>0) msg += " | ";
-                msg += String("N=") + i + ",A=" + c.fullAdvanceAngle + ",B=" + c.halfAdvanceAngle + ",C=" + c.retractAngle + ",F=" + c.defaultFeedLen +
+                msg += String("G=") + (base + i) + ",L=" + i + ",A=" + c.fullAdvanceAngle + ",B=" + c.halfAdvanceAngle + ",C=" + c.retractAngle + ",F=" + c.defaultFeedLen +
                        ",U=" + c.settleTimeMs + ",V=" + c.minTicks + ",W=" + c.maxTicks + ",X=" + (c.ignoreFeedback?"1":"0");
             }
             sendAnswer(0, msg);

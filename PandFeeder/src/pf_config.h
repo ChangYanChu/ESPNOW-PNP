@@ -14,7 +14,7 @@
 
 // Servo channels and angle constraints
 #ifndef SERVO_CHANNEL_COUNT
-#define SERVO_CHANNEL_COUNT 13 // channels 0..12
+#define SERVO_CHANNEL_COUNT 16 // logical servos 0..15
 #endif
 
 #ifndef SERVO_MIN_ANGLE
